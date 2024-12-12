@@ -1,3 +1,5 @@
+/* General list */
+
 .list {
   max-height: 100px;
   overflow: hidden;
@@ -18,12 +20,7 @@
   background-color: #00000022;
 }
 
-
-
-
-
-
-
+/* Drag-and-Drop */
 
 .file-drop-area {
   position: relative;
