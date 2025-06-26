@@ -1,19 +1,20 @@
 <div class="d-flex flex-column vh-100">
   <div class="app-navbar d-flex align-items-center p-2 pe-2">
     <div class="position-absolute top-0 end-0 px-2 py-1 me-2 mt-2 d-flex align-items-center bg-secondary-subtle border border-secondary-subtle rounded">
-      <i class="bi bi-clock me-2"></i><span class="timer h5 m-0 text-secondary" style="min-width:6em">00:00:00</span>
+      <i class="bi bi-clock me-2"></i><span class="timer h5 m-0 text-secondary text-center" style="min-width:4em">00:00:00</span>
     </div>
     <div class="flex-fill">&nbsp;</div>
-    <button class="bt-open-kit btn btn-sm btn-primary"><i class="bi bi-folder2-open"></i> Open Kit</button>
-    <div class="btn-group btn-group-sm ms-2" id="recompose-readcontent">
+    <button class="bt-open-kit btn btn-sm btn-primary"><i class="bi bi-folder2-open"></i> Open</button>
+    <!-- <div class="btn-group btn-group-sm ms-2" id="recompose-readcontent">
       <button class="bt-content btn btn-sm btn-secondary" disabled><i class="bi bi-file-text-fill"></i> Contents</button>
-    </div>
-    <div class="btn-group btn-group-sm ms-2" id="recompose-importexport">
-      <button class="bt-export btn btn-secondary"><i class="bi bi-send"></i> Export</button>
-    </div>
+    </div> -->
     <div class="btn-group btn-group-sm ms-2" id="recompose-saveload">
       <button class="bt-save btn btn-secondary"><i class="bi bi-download"></i> <?php echo Lang::l('save'); ?></button>
-      <button class="bt-load btn btn-secondary"><i class="bi bi-upload"></i> <?php echo Lang::l('load'); ?></button>
+      <button class="bt-export btn btn-outline-secondary"><i class="bi bi-send"></i></button>
+    </div>
+    <div class="dropdown ms-2 dd-saved-maps">
+      <button class="bt-load btn btn-sm btn-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-upload"></i> <span class="px-1"><?php echo Lang::l('load'); ?></span></button>
+      <ul class="dropdown-menu saved-maps"></ul>
     </div>
     <div class="btn-group btn-group-sm ms-2" id="recompose-reset">
       <button class="bt-reset btn btn-danger"><i class="bi bi-arrow-counterclockwise"></i> <?php echo Lang::l('reset'); ?></button>
@@ -46,9 +47,11 @@
 </div>
 
 <form id="concept-map-open-dialog" class="card d-none">
-  <div class="card-body">
+  <div class="card-body mb-3">
 
-    <h4 class="mx-3 my-2">Open Kit</h4>
+    <h4 class="mx-3 my-2 d-flex justify-content-between align-items-center">
+      Open Kit <button class="btn btn-lg bt-cancel"><i class="bi bi-x-lg"></i></button>
+    </h4>
 
     <!-- <div class="p-3 m-3 border bg-light"> -->
     <div class="input-group p-3">
@@ -69,12 +72,12 @@
       <li class="nav-item" role="presentation">
         <button class="nav-link" id="pills-url-tab" data-bs-toggle="pill"
           data-bs-target="#pills-url" type="button" role="tab"
-          aria-controls="pills-url" aria-selected="false">URL</button>
+          aria-controls="pills-url" aria-selected="false" disabled="disabled">URL</button>
       </li>
       <li class="nav-item" role="presentation">
         <button class="nav-link" id="pills-file-tab" data-bs-toggle="pill"
           data-bs-target="#pills-file" type="button" role="tab"
-          aria-controls="pills-file" aria-selected="false">File</button>
+          aria-controls="pills-file" aria-selected="false" disabled="disabled">File</button>
       </li>
     </ul>
     <div class="tab-content" id="pills-tabContent">
@@ -111,13 +114,12 @@
       </div>
     </div>
 
-    <hr>
-
-    <div class="row">
+    <!-- <hr> -->
+    <!-- <div class="row">
       <div class="col text-end mx-3">
         <a class="bt-cancel btn btn-secondary" style="min-width: 6rem;"><?php echo Lang::l('cancel'); ?></a>
       </div>
-    </div>
+    </div> -->
 
   </div>
   <!-- <div class="card-footer">
@@ -159,31 +161,31 @@
 
 <div id="feedback-reason-dialog" class="card d-none">
   <h6 class="card-header d-flex">
-    <span class="drag-handle flex-fill"><i class="dialog-icon bi bi-file-text"></i> <span class="dialog-title">Request Feedback?</span></span>
+    <span class="drag-handle flex-fill"><i class="dialog-icon bi bi-file-text"></i> <span class="dialog-title">Feedback</span></span>
     <i class="bi bi-x-lg bt-close bt-x" role="button"></i>
   </h6>
   <div class="card-body position-relative d-flex flex-column flex-fill">
     <p>Why do you need feedback?</p>
-    <div class="form-check">
+    <div class="form-check" id="feedback-check">
       <input class="form-check-input" type="checkbox" value="" id="inputcorrect">
       <label class="form-check-label" for="inputcorrect">
-        Check whether my last response was right or wrong
+        To check whether my work is correct.
       </label>
     </div>
-    <div class="form-check">
+    <!-- <div class="form-check" id="feedback-info">
       <input class="form-check-input" type="checkbox" value="" id="inputinformation">
       <label class="form-check-label" for="inputinformation">
         I need more information regarding my last response
       </label>
     </div>
-    <div class="form-check">
+    <div class="form-check" id="feedback-understand">
       <input class="form-check-input" type="checkbox" value="" id="inputunderstand">
       <label class="form-check-label" for="inputunderstand">
         I don't understand about my last response
       </label>
-    </div>
+    </div> -->
     <div class="">
-      <label for="inputotherreason" class="form-label">Other</label>
+      <label for="inputotherreason" class="form-label">or</label>
       <input type="text" class="form-control" id="inputotherreason" placeholder="write other reason...">
     </div>
   </div>
@@ -198,7 +200,7 @@
 <div id="feedback-nearby-dialog" class="card d-none">
   <h6 class="card-header d-flex">
     <span class="drag-handle flex-fill"><i class="dialog-icon bi bi-file-text"></i>
-      <span class="dialog-title">Get Feedback for This Node?</span></span>
+      <span class="dialog-title">Contextual Feedback</span></span>
     <i class="bi bi-x-lg bt-close bt-x" role="button"></i>
   </h6>
   <div class="card-body position-relative d-flex flex-column flex-fill">
@@ -206,7 +208,7 @@
     <div class="form-check">
       <input name="reason" class="form-check-input inputinformation" type="radio" value="" id="inputinformationnearby">
       <label class="form-check-label" for="inputinformationnearby">
-        I need more information regarding this node proposition
+        I want to know other concepts that related to this concept.
       </label>
     </div>
     <div class="form-check">
@@ -230,15 +232,15 @@
 
 <div id="feedback-dialog" class="card d-none">
   <h6 class="card-header d-flex">
-    <span class="drag-handle flex-fill"><i class="dialog-icon bi bi-eye-fill me-2"></i> <span class="dialog-title">Quick Feedback</span></span>
+    <span class="drag-handle flex-fill"><i class="dialog-icon bi bi-eye-fill me-2"></i> <span class="dialog-title">Feedback</span></span>
     <i class="bi bi-x-lg bt-close bt-x" role="button"></i>
   </h6>
   <div class="card-body">
     <div class="feedback-content"></div>
   </div>
-  <div class="card-footer text-end">
-    <button class="btn btn-sm btn-secondary bt-cancel bt-close px-3"><?php echo Lang::l('ok'); ?></button>
-    <button class="btn btn-sm btn-success bt-modify px-3 ms-1"><i class="bi bi-play-fill me-1"></i>Resume</button>
+  <div class="card-footer text-center">
+    <button class="btn btn-secondary bt-cancel bt-close px-3"><i class="bi bi-question-square-fill me-1"></i> Let me review the feedback on map.</button>
+    <button class="btn btn-success bt-modify px-3 mt-2"><i class="bi bi-play-fill me-1"></i> Resume and continue working.</button>
   </div>
 </div>
 

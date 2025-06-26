@@ -37,6 +37,49 @@ class MapApiController extends CoreApi {
     }
   }
 
+  function saveCollabMap() {
+    try {
+      $room     = $this->postv('room');
+      $userid   = $this->postv('userid');
+      $mapid    = $this->postv('mapid');
+      $cmid     = $this->postv('cmid');
+      $kid      = $this->postv('kid');
+      $type     = $this->postv('type');
+      $data     = $this->postv('data');
+      $cmapdata = $this->postv('cmapdata');
+      $kitdata  = $this->postv('kitdata');
+
+      $service = new CollabMapService();
+      $id = $service->insert($room, $userid, $mapid, $cmid, $kid, $type, $data, $cmapdata, $kitdata);
+      $lmap = $service->getCollabMap($id);
+      CoreResult::instance($lmap)->show();
+    } catch (Exception $ex) {
+      CoreError::instance($ex->getMessage())->show();
+    }
+  }
+  
+  function getCollabMapList($room, $mapid, $limit = 5) {
+    try {
+      $room = base64_decode($room);
+      $mapid = base64_decode($mapid);
+      $service = new CollabMapService();
+      $maps = $service->getCollabMapList($room, $mapid, $limit);
+      CoreResult::instance($maps)->show();
+    } catch (Exception $ex) {
+      CoreError::instance($ex->getMessage())->show();
+    }
+  }
+
+  function getCollabMap($id) {
+    try {
+      $service = new CollabMapService();
+      $map = $service->getCollabMap($id);
+      CoreResult::instance($map)->show();
+    } catch (Exception $ex) {
+      CoreError::instance($ex->getMessage())->show();
+    }
+  }
+
   function saveDraftLearnerMap() {
     try {
       $userid = $this->postv('userid');

@@ -1,6 +1,13 @@
 class App {
   constructor() {
-    App.manager = CollabManager.instance('kitbuild');
+    this.config = Core.instance().config(); // console.log(this.config);
+    let namespace = 'kitbuild';
+    let options = {
+      host: this.config.get('collabhost'),
+      port: this.config.get('collabport'),
+      path: this.config.get('collabpath')
+    };
+    App.manager = CollabManager.instance(namespace, options);
     App.manager.on('event', this.onManagerEvent.bind(this));
     this.manager = App.manager;
     App.clientIds = new Set();
@@ -59,7 +66,7 @@ class App {
           }
           App.manager.inviteUserToRoom(socketId, room).then(result => {
             if (result) {
-              $('#room-socket-list').find(`.client[data-socketid="${socketId}"] .bt-invite`).removeClass('btn-outline-primary').addClass('btn-primary');
+              $('#room-socket-list').find(`.client[data-socketid="${socketId}"] .bt-invite`).removeClass('btn-outline-primary').addClass('btn-success');
             } 
             console.log(result);
           });
@@ -104,14 +111,14 @@ class App {
       if (!room) {
         UI.warning('Room not selected.').show();
         Loading.done(e.currentTarget, cnt);
-        console.error('end-triggered');
+        // console.error('end-triggered');
         return;
       }
       App.manager.getRoomSockets(room).then(sockets => { 
         console.warn(sockets);
         this.updateSocketList(sockets);
         Loading.done(e.currentTarget, cnt);
-        console.error('end-triggered');
+        // console.error('end-triggered');
       }, e => UI.error(e).show());
     });
     $('#room-socket-list').on('click', '.bt-x', e => {
@@ -155,15 +162,42 @@ class App {
         UI.warning("Please enter a room name.").show();
         return;
       } 
-      App.manager.createRoom(name).then(
+      App.manager.createRoom(`PK/${name}`).then(
         room => UI.success('Room has successfully created.').show(), 
         e => UI.error(e).show()
       );
     });
-    $('#room-tools .bt-push-mapid').on('click', e => {
+    $('#room-tools .bt-push-mapid').on('click', (e) => {
       let room = $('#room-socket-list').attr('data-room');
-      let mapId = $('#room-tools .input-mapid').val().trim();
-      App.manager.pushMapId(mapId, room);
+      let mapid = $('#room-tools .input-mapid').val().trim();
+      // App.manager.pushMapId(mapId, room);
+      
+      let currentLabel = Loading.load(e.currentTarget, "Retrieving data...");
+      // let remember = $('#concept-map-open-dialog input#inputrememberme:checked').val();
+      // let userid = $('#concept-map-open-dialog input[name="userid"]').val().trim();
+      // let mapid = $('#concept-map-open-dialog input[name="mapid"]').val().trim();
+      let url = Core.instance().config('baseurl') + `mapApi/get/${mapid}`;
+      if (mapid.length == 0) {
+        UI.warningDialog("Please enter Kit-Build kit ID to open.").show();
+        return;
+      }
+      console.log(url);
+      Core.instance().ajax().post(url).then(result => { console.log(result);
+        // let data = App.parseIni(result.mapdata);
+        console.log(result, result.mapdata)
+        App.manager.pushMapkit(result, room).then(
+          result => UI.info(result).show(), 
+          error => UI.error(error).show()
+        );
+      }).catch(error => {
+        console.error(error);
+        UI.errorDialog(error).show();
+        return;
+      }).finally(()=>{
+        Loading.done(e.currentTarget, currentLabel);
+      });
+
+
     });
     
   }
@@ -185,13 +219,13 @@ class App {
         let user = data.shift();
         let rooms = data.shift();
         this.updateClient(user);
-        console.log(rooms);
+        // console.log(rooms);
         for(let room of rooms) this.updateRoom(room);
         break;
       case 'user-join-room': {
           let user = data.shift();
           let room = data.shift();
-          console.log(user.name, room.name);
+          // console.log(user.name, room.name);
           this.updateRoom(room);
           let name = $('#room-socket-list').attr('data-room');
           if (name == room.name)
@@ -200,7 +234,7 @@ class App {
       case 'user-leave-room': {
           let user = data.shift();
           let room = data.shift();
-          console.log(user.name, room.name);
+          // console.log(user.name, room.name);
           let roomEl = $('#all-room-list').find(`.room[data-room="${room.name}"]`);
           let name = $('#room-socket-list').attr('data-room');
           App.manager.getRoomSockets(room.name).then(sockets => { // console.log(sockets);
@@ -217,7 +251,7 @@ class App {
         let room = data.shift();
         let user = data.shift();
         let name = $('#room-socket-list').attr('data-room');
-        console.log(room, user, name);
+        // console.log(room, user, name);
         if (room == name)
           this.removeUser('#room-socket-list', user);
         UI.warning(`Join room requested has been rejected.<br>User ${user.name} of room ${room}.`).show();
@@ -281,14 +315,15 @@ class App {
       .find(`.client[data-socketid="${user.socketId}"]`);
     console.log(user, el);
     if (el.length > 0) {
+      $(el).find('.client-name').html(user.name);
       $(el).find('.bt-invite')
-        .removeClass('btn-primary')
+        .removeClass('btn-outline-primary')
         .addClass('btn-success');
       setTimeout(() => {
         $(el).find('.bt-invite')
           .removeClass('btn-success')
           .addClass('btn-outline-primary');
-      }, 3000);
+      }, 2000);
       return;
     }
 

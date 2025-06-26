@@ -43,7 +43,7 @@ class L {
     let direction = CDM.conceptMap.map.direction;
     let compare = Analyzer.compare(learnerMapData, direction);
     // console.warn(compare);
-    dataMap.set('compare', Core.compress(compare));
+    dataMap.set('compare', JSON.stringify(compare));
     dataMap.set('nmatch', compare.match.length);
     dataMap.set('nmiss', compare.miss.length);
     dataMap.set('nexcess', compare.excess.length);
@@ -115,8 +115,12 @@ class App {
 
     this.handleEvent();
     this.handleRefresh().then( sessions => { // console.log(sessions);
-      if (this.config.get('enablecollab'))
-        this.startCollab();
+      Core.instance().session().getId().then(sessid => {
+        sessions.id = sessid
+        if (this.config.get('enablecollab'))
+        this.startCollab(sessions);
+      });
+      
     });
 
   }
@@ -508,6 +512,14 @@ class App {
       return feedbackDialog;
     };
 
+    let userDialog = UI.modal("#user-dialog", {
+      hideElement: ".bt-close",
+      backdrop: false,
+      draggable: true,
+      dragHandle: ".drag-handle",
+      width: 375,
+    });
+
     /**
      * Open or Create New Kit
      * */
@@ -521,15 +533,27 @@ class App {
       else
         $(`#concept-map-open-dialog .list-topic .list-item[data-tid="${tid}"]`).trigger("click");
       $("#concept-map-open-dialog .bt-refresh-topic-list").trigger("click");
-      $('input[name="userid"]').val(decodeURI(App.getCookie('userid')));
+
+      // console.log(CDM);
+
+      let userid = decodeURIComponent(App.getCookie('userid') ?? "");
+      // console.log(userid);
+      if (!userid || userid == "") userid = decodeURIComponent(CDM.userid ?? "");
+      // console.log(userid, CDM.userid, userid == "undefined");
+      if (userid == "undefined" || userid == "null") userid = undefined;
+      $('input[name="userid"]').val(userid ?? "");
       openDialog.show();
+      setTimeout(() => { // console.log(userid, !userid);
+        if (!userid) $('input[name="userid"]').focus().trigger('click');
+        else $('input[name="mapid"]').focus().trigger('click');
+      }, 300);
     });
 
     $('#concept-map-open-dialog').on('submit', (e) => { e.preventDefault(); console.error(e); });
 
     $('#concept-map-open-dialog').on('click', '.bt-open-id', (e) => {
       e.preventDefault();
-      let currentLabel = Loading.load(e.currentTarget, "Retrieving data...");
+      
       let remember = $('#concept-map-open-dialog input#inputrememberme:checked').val();
       let userid = $('#concept-map-open-dialog input[name="userid"]').val().trim();
       let mapid = $('#concept-map-open-dialog input[name="mapid"]').val().trim();
@@ -539,35 +563,22 @@ class App {
         return;
       }
       // console.log(url, remember, userid);
+      let currentLabel = Loading.load(e.currentTarget, "Retrieving data...");
       Core.instance().ajax().post(url, {
         remember: remember ? 1 : 0,
         userid: userid
-      }).then(result => { // console.log(result.mapdata);
-        let data = App.parseIni(result.mapdata);
-        try {
-          let conceptMap = Core.decompress(data.conceptMap.replaceAll('"',''));
-          let kit = Core.decompress(data.kit.replaceAll('"',''));
-          // console.log(conceptMap, kit);
-          CDM.conceptMap = conceptMap;
-          CDM.kitId = kit.map.id;
-          CDM.conceptMapId = kit.map.cmid;
-          CDM.kit = kit;
-          // console.error(CDM);
-        } catch(e) { console.error(e); }
-        if (!CDM.conceptMap) {
-          UI.errorDialog("Invalid concept map data.").show();
-          return;
-        }
-        if (!$('#concept-map-open-dialog input[name="userid"]').val().trim()) {
-          UI.warningDialog("Please enter your name or a user ID.").show();
-          return;
-        }
-        App.openKit().then(() => {
-          App.postOpenKit();
-          openDialog.hide();
-        });
-        // console.log(data);
-        // console.warn("Log status: ", result);
+      }).then(mapkit => {
+        console.log(mapkit);
+        let {kit, conceptMap} = this.unpackMapkit(mapkit);
+        this.setKitCDM(kit, conceptMap);
+        CDM.userid = userid;
+        App.openKit(kit, conceptMap).then(
+          (result) => {
+            openDialog.hide();
+            App.postOpenKit(userid, remember);
+          },
+          (error) => UI.error(error).show()
+        );
       }).catch(error => {
         console.error(error);
         UI.errorDialog(error).show();
@@ -604,6 +615,7 @@ class App {
           CDM.kit = kit;
           // console.error(CDM);
         } catch(e) { console.error(e); }
+        CDM.userid = $('#concept-map-open-dialog input[name="userid"]').val().trim();
         if (!CDM.conceptMap) { // console.error("X");
           UI.errorDialog("Invalid concept map data.").show();
           return;
@@ -613,7 +625,7 @@ class App {
           return;
         }
         App.openKit().then(() => {
-          App.postOpenKit();
+          App.postOpenKit(userid, remember);
           openDialog.hide();
         });
         // console.log(data);
@@ -625,20 +637,21 @@ class App {
       });
     });
 
-    $('#concept-map-open-dialog').on('click', '.bt-open', (e) => {
-      if (!CDM.conceptMap) { 
-        UI.errorDialog("Invalid concept map data.").show();
-        return;
-      }
-      if (!$('#concept-map-open-dialog input[name="userid"]').val().trim()) {
-        UI.warningDialog("Please enter your name or a user ID.").show();
-        return;
-      }
-      App.openKit().then(() => {
-        App.postOpenKit();
-        openDialog.hide();
-      });
-    });
+    // $('#concept-map-open-dialog').on('click', '.bt-open', (e) => {
+    //   if (!CDM.conceptMap) { 
+    //     UI.errorDialog("Invalid concept map data.").show();
+    //     return;
+    //   }
+    //   if (!$('#concept-map-open-dialog input[name="userid"]').val().trim()) {
+    //     UI.warningDialog("Please enter your name or a user ID.").show();
+    //     return;
+    //   }
+    //   App.openKit().then(() => {
+    //     CDM.userid = $('#concept-map-open-dialog input[name="userid"]').val().trim();
+    //     App.postOpenKit();
+    //     openDialog.hide();
+    //   });
+    // });
 
     /**
      *
@@ -718,23 +731,44 @@ class App {
 
     $(".app-navbar").on("click", ".bt-save", () => {
 
-      if(!CDM.kit) {
-        UI.dialog('Please open a kit').show();
+      console.log(CDM.kit);
+      
+      if (!CDM.kit) {
+        UI.dialog('Invalid kit data.').show();
+        return;
+      }
+      if (!CDM.conceptMap) {
+        UI.dialog('Invalid concept map data.').show();
         return;
       }
 
-      let {d, lmapdata} = this.buildLearnerMapData(); // console.log(canvas);
-      let data = {};
+      // console.log(CDM, App.collab?.getData('mapid'));
+      // console.log(App.collab);
+      let {data, lmapdata} = this.buildLearnerMapData(); // console.log(canvas);
+
+      data.type = 'draft';
+      lmapdata.map.type = 'draft';
+      
+      data.room = KitBuildCollab?.getPersonalRoom()?.name;
       data.id = CDM.kit.map.id;
+      data.mapid = App.collab?.getData('mapid');
       data.cmid = CDM.kit.map.cmid;
       data.userid = CDM.userid;
-      data.data = lmapdata;
+      data.data = JSON.stringify(lmapdata);
+      data.kitdata = JSON.stringify(CDM.kit);
+      data.cmapdata = JSON.stringify(CDM.conceptMap);
       data.sessid = App.getCookie(CDM.cookieid);
-      console.log(data);
 
-      this.session.set('draft-map', Core.compress(data)).then((result) => {
-        console.log(result);
-        UI.success("Concept map has been saved successfully.").show();
+      // console.log(data, lmapdata); // return;
+
+      let saveToSession = this.session.set('draft-map', Core.compress(data));
+      let saveToCollabMap = this.ajax.post("mapApi/saveCollabMap", data);
+      let saveLearnerMap = this.ajax.post("mapApi/saveLearnerMap", data);
+      let saveMap = (data.room) ? saveToCollabMap : saveLearnerMap;
+      Promise.all([saveToSession, saveMap]).then(result => {
+        // let resultSession = result[0];
+        // let resultCollabMap = result[1];
+
         let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId);
         L.canvas(dataMap, App.inst.canvas);
         L.compare(dataMap, App.inst.canvas, CDM.conceptMap.canvas);
@@ -744,12 +778,85 @@ class App {
           userid: data.userid,
           sessid: data.sessid
         }, dataMap);
+
+        UI.success("Concept map has been saved successfully.").show();
+
+        // data.id = resultCollabMap.id;
+        // data.created = resultCollabMap.created;
+        // data.duration = App.timer.ts;
+        // let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId);
+        // L.canvas(dataMap, App.inst.canvas);
+        // L.compare(dataMap, App.inst.canvas, CDM.conceptMap.canvas);
+        // L.log('save-map', data, dataMap);
+        // UI.info('Map has been saved.').show();
+        
       });
+
+      // this.session.set('draft-map', Core.compress(data)).then((result) => {
+      //   console.log(result);
+      //   UI.success("Concept map has been saved successfully.").show();
+      //   let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId);
+      //   L.canvas(dataMap, App.inst.canvas);
+      //   L.compare(dataMap, App.inst.canvas, CDM.conceptMap.canvas);
+      //   L.log('save-draft', {
+      //     id: data.id,
+      //     cmid: data.cmid,
+      //     userid: data.userid,
+      //     sessid: data.sessid
+      //   }, dataMap);
+      // }, (error) => console.error(error));
+      // this.ajax
+      //   .post("mapApi/saveCollabMap", data)
+      //   .then(collabMap => { console.log(collabMap);
+      //     data.id = collabMap.id;
+      //     data.created = collabMap.created;
+      //     data.duration = App.timer.ts;
+      //     let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId);
+      //     L.canvas(dataMap, App.inst.canvas);
+      //     L.compare(dataMap, App.inst.canvas, CDM.conceptMap.canvas);
+      //     L.log('save-map', data, dataMap);
+      //     UI.info('Map has been saved.').show();
+      //   }).catch((error) => {
+      //     console.error(error);
+      //   });
 
 
     });
     $(".app-navbar").on("click", ".bt-load", () => {
 
+      if (!App.collab?.getData('mapid')) {
+        UI.error('Invalid Map ID').show();
+        return;
+      }
+
+      if (!KitBuildCollab.getPersonalRoom()?.name) {
+        UI.error('Invalid Room').show();
+        return;
+      }
+
+      let room = btoa(KitBuildCollab.getPersonalRoom()?.name);
+      let mapid = btoa(App.collab?.getData('mapid'));
+      console.log(KitBuildCollab.getPersonalRoom().name, App.collab?.getData('mapid'));
+
+      this.ajax.get(`mapApi/getCollabMapList/${room}/${mapid}/8`).then((maps) => {
+        console.log(maps);
+        let mapsHtml = '';
+        for(let map of maps) {
+          let type = (map.type == 'draft') ? 'warning' : 'success'
+          mapsHtml += `<li>`
+          mapsHtml += `<a class="dropdown-item fs-6 d-flex flex-column justify-content-between align-items-center item-saved-map" href="#" data-id="${map.id}">`;
+          mapsHtml += `<span>${map.userid}</span>`;
+          mapsHtml += `<span>`;
+          mapsHtml += `<span class="badge text-bg-${type} me-2"> </span>`;
+          mapsHtml += `<code class="text-danger">${map.created}</code>`;
+          mapsHtml += `</span>`;
+          mapsHtml += `</a>`;
+          mapsHtml += `</li>`;
+        }
+        $('.dd-saved-maps .saved-maps').html(mapsHtml);
+      });
+
+      return;
       if(!CDM.kit) {
         UI.dialog('Please open a kit prior to loading.').show();
         return;
@@ -861,13 +968,27 @@ class App {
       //   });
     });
 
+    $('ul.saved-maps').on('click', 'a.item-saved-map', (e) => {
+      let id = $(e.currentTarget).attr('data-id');
+      let confirm = UI.confirm(
+        "Load selected map?<br>Loaded map will be synchronized to all members in room."
+      ).emphasize().positive(() => {
+        App.collab.loadCollabMap(id);
+        confirm.hide();
+      }).show();
+    });
+
     /**
      * Reset concept map to kit
      * */
 
     $(".app-navbar").on("click", ".bt-reset", (e) => {
       if (!CDM.kit) {
-        UI.info("Please open a kit.").show();
+        UI.info("Invalid kit.").show();
+        return;
+      }
+      if (!CDM.conceptMap) {
+        UI.info("Invalid concept map.").show();
         return;
       }
       if (feedbackDialog.learnerMapEdgesData)
@@ -876,44 +997,51 @@ class App {
       let confirm = UI.confirm(
         "Do you want to reset this concept map as defined in the kit?"
       ).positive(() => {
-        App.parseKitMapOptions(CDM.kit);
-        App.resetMapToKit(CDM.kit, this.canvas).then(() => {
-          // Remove attribute of image binary data 
-          let attrs = ['image', 'bug'];
-          let canvas = this.canvas.cy.elements().jsons(); // console.log(canvas);
-          for(let el of canvas) {
-            for (let attr of attrs) { // console.log(el, el.data[attr])
-              if (el.data.image) delete el.data[attr];
-            }
-          }
-          let dataMap = new Map([["cmapid", CDM.kitId]]);
-          dataMap.set('canvas', Core.compress(canvas));
-          let learnerMapData = KitBuildUI.buildConceptMapData(this.canvas);
-          learnerMapData.conceptMap = CDM.conceptMap.canvas;
-          // console.log(learnerMapData);
-          Analyzer.composePropositions(learnerMapData);
-          let direction = CDM.conceptMap.map.direction;
-          let compare = Analyzer.compare(learnerMapData, direction);
-          // console.warn(compare);
-          dataMap.set('compare', Core.compress(compare)); 
-          L.log("reset", null, dataMap);
-          App.postOpenKit();
-          // App.collab(
-          //   "command",
-          //   "set-kit-map",
-          //   kit,
-          //   this.canvas.cy.elements().jsons()
-          // );
-          // L.log("reset-learner-map", CDM.kit.map, null, {
-          //   includeMapData: true,
-          //   lmid: this.learnerMap.map.lmid,
-          // });
-        });
-        let undoRedo = this.canvas.toolbar.tools.get(KitBuildToolbar.UNDO_REDO);
-        if (undoRedo) undoRedo.clearStacks().updateStacksStateButton();
-        confirm.hide();
-        UI.info("Concept map has been reset.").show();
-        App.lastFeedback = App.timer.ts;
+        App.openKit(CDM.kit, CDM.conceptMap).then(
+          (result) => {
+            let undoRedo = this.canvas.toolbar.tools.get(KitBuildToolbar.UNDO_REDO);
+            if (undoRedo) undoRedo.clearStacks().updateStacksStateButton();
+            UI.info("Concept map has been reset.").show();
+            confirm.hide();
+            // TODO: sync 
+            // App.lastFeedback = App.timer.ts;
+          },
+          (error) => UI.error(error).show()
+        );
+        // App.parseKitMapOptions(CDM.kit);
+        // App.resetMapToKit(CDM.kit, this.canvas).then(() => {
+        //   // Remove attribute of image binary data 
+        //   let attrs = ['image', 'bug'];
+        //   let canvas = this.canvas.cy.elements().jsons(); // console.log(canvas);
+        //   for(let el of canvas) {
+        //     for (let attr of attrs) { // console.log(el, el.data[attr])
+        //       if (el.data.image) delete el.data[attr];
+        //     }
+        //   }
+        //   let dataMap = new Map([["cmapid", CDM.kitId]]);
+        //   dataMap.set('canvas', Core.compress(canvas));
+        //   let learnerMapData = KitBuildUI.buildConceptMapData(this.canvas);
+        //   learnerMapData.conceptMap = CDM.conceptMap.canvas;
+        //   // console.log(learnerMapData);
+        //   Analyzer.composePropositions(learnerMapData);
+        //   // let direction = CDM.conceptMap.map.direction;
+        //   // let compare = Analyzer.compare(learnerMapData, direction);
+        //   // console.warn(compare);
+        //   // dataMap.set('compare', Core.compress(compare)); 
+        //   L.compare(dataMap, App.inst.canvas, CDM.conceptMap.canvas);
+        //   L.log("reset", null, dataMap);
+        //   App.postOpenKit(CDM.userid);
+        //   // App.collab(
+        //   //   "command",
+        //   //   "set-kit-map",
+        //   //   kit,
+        //   //   this.canvas.cy.elements().jsons()
+        //   // );
+        //   // L.log("reset-learner-map", CDM.kit.map, null, {
+        //   //   includeMapData: true,
+        //   //   lmid: this.learnerMap.map.lmid,
+        //   // });
+        // });
         return;
       })
       .show();
@@ -930,20 +1058,20 @@ class App {
       } 
 
       // console.log(App.timer, App.timer.ts, App.lastFeedback);
-      if (!App.lastFeedback) {
-        if (App.timer.ts < App.feedbackDelay) {
-          let timeleft = App.feedbackDelay - (App.timer.ts - (App.lastFeedback ?? 0));
-          UI.dialog(`Feedback is not available right now. Please wait for ${timeleft} seconds`).show();
-          return;
-        }
-        // App.lastFeedback = App.timer.ts;
-      } else {
-        if (App.timer.ts - App.lastFeedback < App.feedbackDelay || App.timer.ts < App.feedbackDelay) {
-          let timeleft = App.feedbackDelay - (App.timer.ts - App.lastFeedback);
-          UI.dialog(`Feedback is not available right now. Please wait for ${timeleft} seconds`).show();
-          return;
-        }
-      }
+      // if (!App.lastFeedback) {
+      //   if (App.timer.ts < App.feedbackDelay) {
+      //     let timeleft = App.feedbackDelay - (App.timer.ts - (App.lastFeedback ?? 0));
+      //     UI.dialog(`Feedback is not available right now. Please wait for ${timeleft} seconds`).show();
+      //     return;
+      //   }
+      //   // App.lastFeedback = App.timer.ts;
+      // } else {
+      //   if (App.timer.ts - App.lastFeedback < App.feedbackDelay || App.timer.ts < App.feedbackDelay) {
+      //     let timeleft = App.feedbackDelay - (App.timer.ts - App.lastFeedback);
+      //     UI.dialog(`Feedback is not available right now. Please wait for ${timeleft} seconds`).show();
+      //     return;
+      //   }
+      // }
 
       if (feedbackDialog.learnerMapEdgesData)
         $(".app-navbar .bt-clear-feedback").trigger("click");
@@ -1025,8 +1153,9 @@ class App {
           .show();
       } else feedbackDialog.setCompare(compare, dialogLevel).show();
       let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId);
-      dataMap.set('compare', Core.compress(compare));
+      // dataMap.set('compare', JSON.stringify(compare));
       L.canvas(dataMap, App.inst.canvas);
+      L.compare(dataMap, App.inst.canvas, CDM.conceptMap.canvas);
       L.log("feedback", {
         level: level,
         compare: compare,
@@ -1140,7 +1269,7 @@ class App {
           .clearIndicatorCanvas();
   
         let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId);
-        dataMap.set('compare', Core.compress(compare));
+        // dataMap.set('compare', Core.compress(compare));
         L.canvas(dataMap, App.inst.canvas);
         L.compare(dataMap, App.inst.canvas, CDM.conceptMap.canvas);
         L.log("feedback-distance", {
@@ -1195,6 +1324,22 @@ class App {
 
   }
 
+  unpackMapkit(result) {
+    let data = App.parseIni(result.mapdata);
+    try {
+      let conceptMap = Core.decompress(data.conceptMap.replaceAll('"', ''));
+      let kit = Core.decompress(data.kit.replaceAll('"', ''));
+      return { conceptMap, kit }
+      // console.log(conceptMap, kit);
+      // CDM.conceptMap = conceptMap;
+      // CDM.kitId = kit.map.id;
+      // CDM.conceptMapId = kit.map.cmid;
+      // CDM.kit = kit;
+      // console.error(CDM);
+    } catch (e) { console.error(e); }
+    return {}
+  }
+
   buildLearnerMapData() {
     this.canvas.cy.elements().removeClass('select').unselect();
     let lmapdata = {};
@@ -1246,35 +1391,39 @@ class App {
 
   onReferenceAction(nodes) {
 
-    if (!App.lastFeedback) {
-      if (App.timer.ts < App.feedbackDelay) {
-        let timeleft = App.feedbackDelay - (App.timer.ts - (App.lastFeedback ?? 0));
-        UI.dialog(`Feedback is not available right now. Please wait for ${timeleft} seconds`).show();
-        return;
-      }
-      // App.lastFeedback = App.timer.ts;
-    } else {
-      if (App.timer.ts - App.lastFeedback < App.feedbackDelay || App.timer.ts < App.feedbackDelay) {
-        let timeleft = App.feedbackDelay - (App.timer.ts - App.lastFeedback);
-        UI.dialog(`Feedback is not available right now. Please wait for ${timeleft} seconds`).show();
-        return;
-      }
-    }
+    // if (!App.lastFeedback) {
+    //   if (App.timer.ts < App.feedbackDelay) {
+    //     let timeleft = App.feedbackDelay - (App.timer.ts - (App.lastFeedback ?? 0));
+    //     UI.dialog(`Feedback is not available right now. Please wait for ${timeleft} seconds`).show();
+    //     return;
+    //   }
+    //   // App.lastFeedback = App.timer.ts;
+    // } else {
+    //   if (App.timer.ts - App.lastFeedback < App.feedbackDelay || App.timer.ts < App.feedbackDelay) {
+    //     let timeleft = App.feedbackDelay - (App.timer.ts - App.lastFeedback);
+    //     UI.dialog(`Feedback is not available right now. Please wait for ${timeleft} seconds`).show();
+    //     return;
+    //   }
+    // }
+
+    console.warn(nodes);
 
     App.inst.feedbackNearbyDialog.nodeId = nodes[0].data().id;
     App.inst.feedbackNearbyDialog.nodes = nodes;
     App.inst.feedbackNearbyDialog.show();
 
-    // console.warn(nodes);    
-    // console.log(this);
   }
 
-  async startCollab() {
+  async startCollab(session = null) { console.log(session);
     App.collab = await KitBuildCollab.instance('kitbuild', this.canvas, {
       host: this.config.get('collabhost'),
       port: this.config.get('collabport'),
-      listener: this.onCollabEvent.bind(this)
+      path: this.config.get('collabpath'),
+      listener: this.onCollabEvent.bind(this),
+      session: session
     });
+    if (session?.mapid)
+      App.collab?.setData('mapid', session.mapid);
     KitBuildCollab.enableControl();
   }
 
@@ -1283,7 +1432,11 @@ class App {
     switch(e) {
       case 'reconnected':
       case 'connected':
-        App.collab?.registerUser(decodeURI(App.getCookie('userid'))); 
+        App.collab?.registerUser(decodeURI(App.getCookie('userid')));
+        CDM.userid = App.collab.getCollabId();
+        this.session.set('userid', CDM.userid);
+        Logger.userid = CDM.userid;
+        // console.log(App.collab?.getCollabId());
         break;
       case 'socket-command': {
         let command = data.shift();
@@ -1330,7 +1483,89 @@ class App {
         UI.info(`You have left Room: <strong>${room.name}</strong>.`)
           .show();
       } break;
+      case 'push-mapkit': {
+        let mapkit = data.shift(); console.log(mapkit);
+        // mapkit = {
+        //   id: "mapid or kit id"
+        //   mapdata: "JSON string of mapdata"
+        // }
+        // mapdata = {
+        //   conceptMap: "... compressed ...",
+        //   kit: "... compressed ..."
+        //}
+        if (!('id' in mapkit && 'mapdata' in mapkit)) {
+          UI.error('Invalid map kit.').show();
+        }
+        this.session.set('mapid', mapkit?.id);
+        App.collab?.setData('mapid', mapkit?.id);
+        CDM.userid = App.collab.getCollabId(); // console.log(App.collab, CDM);
+
+        // unpack and open kit on cytoscape canvas.
+        let { conceptMap, kit } = this.unpackMapkit(mapkit);
+        this.setKitCDM(kit, conceptMap);
+        App.openKit(kit, conceptMap).then(
+          (result) => {},
+          (error) => UI.error(error).show()
+        );
+      } break;
+      case 'load-collabmap': {
+        let id = data.shift();
+        // console.log(id);
+        this.ajax.get(`mapApi/getCollabMap/${id}`).then(map => {
+          console.log(map);
+          let mapkit = JSON.parse(map.data);
+          let conceptMap = JSON.parse(map.cmapdata);
+          let kit = JSON.parse(map.kitdata);
+          this.setKitCDM(kit, conceptMap);
+          // console.log(mapkit, conceptMap, kit);
+          let collabMap = KitBuildUI.composeLearnerMap(mapkit.canvas, conceptMap.canvas);
+          // console.log(collabMap);
+
+          this.canvas.cy.elements().remove();
+          this.canvas.cy.add(collabMap);
+          this.canvas.applyElementStyle();
+          this.canvas.toolbar.tools
+            .get(KitBuildToolbar.CAMERA)
+            .fit(null, { duration: 0 });
+          KitBuildUI.showBackgroundImage(this.canvas);
+
+          let sessid = App.getCookie(CDM.cookieid); 
+          // console.log(CDM.cookieid, sessid, collabMap.sessid);
+
+          let draftData = Object.assign({
+            sessid: sessid,
+            psessid: collabMap.sessid,
+            collabmap: id
+          }, map);
+          delete draftData.data;
+          delete draftData.cmapdata;
+          delete draftData.kitdata;
+
+          let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId);
+          L.canvas(dataMap, App.inst.canvas);
+          L.compare(dataMap, App.inst.canvas, CDM.conceptMap.canvas);
+          L.log('load-draft', draftData, dataMap);
+          // App.lastFeedback = App.timer.ts;
+          // App.postOpenKit();
+          // this.openMapkit(mapkit);
+          // App.openKit().then(
+          //   (result) => {},
+          //   (error) => UI.error(error).show()
+          // );
+          // this.openMapkit(mapkit);
+          // let room = KitBuildCollab.getPersonalRoom()?.name;
+          console.log(mapkit);
+          // App.collab.pushMapkit(mapkit, room);
+        });        
+      }
     }
+  }
+
+  setKitCDM(kit, conceptMap) {
+    CDM.kit = kit;
+    CDM.kitId = kit.map.id;
+    CDM.conceptMap = conceptMap;
+    CDM.conceptMapId = kit.map.cmid;
   }
 
   generateMapState() {
@@ -1361,15 +1596,23 @@ class App {
         console.warn('Invalid conceptMap: ', conceptMap);
         return;
       }
+
       CDM.kit = kit;
+      CDM.kitId = kit.map.id;
+      CDM.conceptMapId = kit.map.cmid;
       CDM.conceptMap = conceptMap;
+
       this.canvas.cy.elements().remove();
       this.canvas.cy.add(cyData ? cyData : {}).unselect();
       this.canvas.applyElementStyle();
+      // this.canvas.toolbar.tools.get(KitBuildToolbar.NODE_CREATE)
+      //   .setActiveDirection(conceptMap.map.direction)
       this.canvas.toolbar.tools.get(KitBuildToolbar.CAMERA).fit(null, {duration: 0});
-      // KitBuildApp.inst.canvas.toolbar.tools.get(KitBuildToolbar.NODE_CREATE).setActiveDirection(conceptMap.map.direction)
       this.canvas.toolbar.tools.get(KitBuildToolbar.UNDO_REDO).clearStacks().updateStacksStateButton();
       this.canvas.toolCanvas.clearCanvas().clearIndicatorCanvas();
+      this.canvas.toolCanvas.tools
+        .get(KitBuildCanvasTool.DISTANCECOLOR)
+        .setConceptMap(CDM.conceptMap.canvas);
       this.canvas.cy.remove('#VIRTUAL');
       resolve(mapState);
     });
@@ -1419,20 +1662,20 @@ App.onCanvasEvent = (canvasId, event, data) => {
   if (event == 'distance-feedback') {
 
     // console.log(App.timer, App.timer.ts, App.lastFeedback);
-    if (!App.lastFeedback) {
-      if (App.timer.ts < App.feedbackDelay) {
-        let timeleft = App.feedbackDelay - (App.timer.ts - (App.lastFeedback ?? 0));
-        UI.dialog(`Feedback is not available right now. Please wait for ${timeleft} seconds`).show();
-        return;
-      }
-      // App.lastFeedback = App.timer.ts;
-    } else {
-      if (App.timer.ts - App.lastFeedback < App.feedbackDelay || App.timer.ts < App.feedbackDelay) {
-        let timeleft = App.feedbackDelay - (App.timer.ts - App.lastFeedback);
-        UI.dialog(`Feedback is not available right now. Please wait for ${timeleft} seconds`).show();
-        return;
-      }
-    }
+    // if (!App.lastFeedback) {
+    //   if (App.timer.ts < App.feedbackDelay) {
+    //     let timeleft = App.feedbackDelay - (App.timer.ts - (App.lastFeedback ?? 0));
+    //     UI.dialog(`Feedback is not available right now. Please wait for ${timeleft} seconds`).show();
+    //     return;
+    //   }
+    //   // App.lastFeedback = App.timer.ts;
+    // } else {
+    //   if (App.timer.ts - App.lastFeedback < App.feedbackDelay || App.timer.ts < App.feedbackDelay) {
+    //     let timeleft = App.feedbackDelay - (App.timer.ts - App.lastFeedback);
+    //     UI.dialog(`Feedback is not available right now. Please wait for ${timeleft} seconds`).show();
+    //     return;
+    //   }
+    // }
 
     App.inst.feedbackNearbyDialog.nodeId = data.id;
     App.inst.feedbackNearbyDialog.nodes = [App.inst.canvas.cy.elements(`#${data.id}`)];
@@ -1452,19 +1695,22 @@ App.onCanvasEvent = (canvasId, event, data) => {
 
 };
 
-App.openKit = () => {
+App.openKit = (kit, conceptMap) => {
   return new Promise((resolve, reject) => {
-    CDM.userid = $('#concept-map-open-dialog input[name="userid"]').val().trim();
+    if (!CDM.userid) reject('Invalid user ID');
+    if (!kit.canvas) reject('Invalid concept map canvas data');
+    if (!conceptMap.canvas) reject('Invalid concept map canvas data');
     // lmap.canvas.conceptMap = conceptMap.canvas;
-    if (!CDM.kit) {
-      CDM.kit = {};
-      CDM.kit.map = {};
-      CDM.kit.map.options = {};
-      CDM.kit.canvas = CDM.conceptMap.canvas;
-    }
+    // if (!CDM.kit) {
+    //   CDM.kit = {};
+    //   CDM.kit.map = {};
+    //   CDM.kit.map.options = {};
+    //   CDM.kit.canvas = CDM.conceptMap.canvas;
+    // }
   
     // console.log(CDM);
-    CDM.kit.canvas.conceptMap = CDM.conceptMap.canvas;
+    // CDM.kit.canvas.conceptMap = CDM.conceptMap.canvas;
+
     // console.log(Logger);
     if (typeof Logger != undefined) Logger.userid = CDM.userid;
 
@@ -1472,7 +1718,7 @@ App.openKit = () => {
   
     // let cyData = KitBuildUI.composeKitMap(data.lmap ? lmap.canvas : kit.canvas);
     App.parseKitMapOptions(CDM.kit);
-    let cyData = KitBuildUI.composeKitMap(CDM.kit.canvas);
+    let cyData = KitBuildUI.composeKitMap(kit.canvas, conceptMap.canvas);
     canvas.cy.elements().remove();
     canvas.cy.add(cyData);
     // canvas.toolbar.tools.get(KitBuildToolbar.CAMERA).fit(null, {duration: 0});
@@ -1506,13 +1752,14 @@ App.openKit = () => {
     let result = Analyzer.composePropositions(learnerMapData);
     // console.log(result, learnerMapData);
     let direction = CDM.conceptMap.map.direction;
-    let compare = Analyzer.compare(learnerMapData, direction);
+    // let compare = Analyzer.compare(learnerMapData, direction);
     // console.warn(compare);
-    dataMap.set('compare', Core.compress(compare));  
+    // dataMap.set('compare', JSON.stringify(compare));  
 
     App.inst.session.regenerateId().then(sessid => {
       Logger.sessid = App.getCookie(CDM.cookieid);
       Logger.seq = 1;
+      L.compare(dataMap, App.inst.canvas, CDM.conceptMap.canvas);
       L.log("open-kit", CDM.kitId, dataMap);
     });
 
@@ -1520,9 +1767,7 @@ App.openKit = () => {
   });
 }
 
-App.postOpenKit = () => {
-  let remember = $('#concept-map-open-dialog input#inputrememberme:checked').val();
-  let userid = $('#concept-map-open-dialog input[name="userid"]').val().trim();
+App.postOpenKit = (userid, remember = true) => {
   if (remember) Core.instance().cookie().set('userid', userid);
   else Core.instance().cookie().unset('userid');
   App.timer = new Timer('.app-navbar .timer');
@@ -1597,77 +1842,77 @@ App.parseKitMapOptions = (kit) => {
   // console.log(kit);
 };
 
-App.resetMapToKit = (kit, canvas) => {
-  return new Promise((resolve, reject) => {
-    // will also set and cache the concept map
-    // App.inst.setKitMap(kit);
-    canvas.cy.elements().remove();
-    canvas.cy.add(KitBuildUI.composeKitMap(kit.canvas));
-    canvas.applyElementStyle();
-    canvas.toolbar.tools
-        .get(KitBuildToolbar.NODE_CREATE)
-        .setActiveDirection(CDM.conceptMap.map.direction);
-    canvas.applyElementStyle();
-    console.warn(kit);
-    if (kit.map.layout == "random") {
-      canvas.cy
-        .elements()
-        .layout({
-          name: "fcose",
-          animationDuration: 0,
-          fit: false,
-          stop: () => {
-            canvas.toolbar.tools
-              .get(KitBuildToolbar.CAMERA)
-              .center(null, { duration: 0 });
-            resolve(true);
-          },
-        })
-        .run();
-    } else {
-      canvas.toolbar.tools
-        .get(KitBuildToolbar.CAMERA)
-        .fit(null, { duration: 0 });
-      resolve(true);
-    }
-    KitBuildUI.showBackgroundImage(canvas);
-    resolve(true);
+// App.resetMapToKit = (kit, canvas) => {
+//   return new Promise((resolve, reject) => {
+//     // will also set and cache the concept map
+//     // App.inst.setKitMap(kit);
+//     canvas.cy.elements().remove();
+//     canvas.cy.add(KitBuildUI.composeKitMap(kit.canvas));
+//     canvas.applyElementStyle();
+//     canvas.toolbar.tools
+//         .get(KitBuildToolbar.NODE_CREATE)
+//         .setActiveDirection(CDM.conceptMap.map.direction);
+//     canvas.applyElementStyle();
+//     console.warn(kit);
+//     if (kit.map.layout == "random") {
+//       canvas.cy
+//         .elements()
+//         .layout({
+//           name: "fcose",
+//           animationDuration: 0,
+//           fit: false,
+//           stop: () => {
+//             canvas.toolbar.tools
+//               .get(KitBuildToolbar.CAMERA)
+//               .center(null, { duration: 0 });
+//             resolve(true);
+//           },
+//         })
+//         .run();
+//     } else {
+//       canvas.toolbar.tools
+//         .get(KitBuildToolbar.CAMERA)
+//         .fit(null, { duration: 0 });
+//       resolve(true);
+//     }
+//     KitBuildUI.showBackgroundImage(canvas);
+//     resolve(true);
 
-    // TODO: apply kit options to UI
-    // console.log(kit)
+//     // TODO: apply kit options to UI
+//     // console.log(kit)
 
-    // let feedbacklevelFeature =
-    //   '<button class="bt-feedback btn btn-warning"><i class="bi bi-eye-fill"></i> Feedback <span class="count"></span></button>';
-    // feedbacklevelFeature +=
-    //   '<button class="bt-clear-feedback btn btn-warning"><i class="bi bi-eye-slash-fill"></i> Clear Feedback</button>';
-    // let saveloadFeature =
-    //   '<button class="bt-save btn btn-secondary"><i class="bi bi-download"></i> Save</button>';
-    // saveloadFeature +=
-    //   '<button class="bt-load btn btn-secondary"><i class="bi bi-upload"></i> Load</button>';
-    // let readcontentFeature =
-    //   '<button class="bt-content btn btn-sm btn-secondary"><i class="bi bi-file-text-fill"></i> Contents</button>';
-    // let resetFeature =
-    //   '<button class="bt-reset btn btn-danger"><i class="bi bi-arrow-counterclockwise"></i> Reset</button>';
+//     // let feedbacklevelFeature =
+//     //   '<button class="bt-feedback btn btn-warning"><i class="bi bi-eye-fill"></i> Feedback <span class="count"></span></button>';
+//     // feedbacklevelFeature +=
+//     //   '<button class="bt-clear-feedback btn btn-warning"><i class="bi bi-eye-slash-fill"></i> Clear Feedback</button>';
+//     // let saveloadFeature =
+//     //   '<button class="bt-save btn btn-secondary"><i class="bi bi-download"></i> Save</button>';
+//     // saveloadFeature +=
+//     //   '<button class="bt-load btn btn-secondary"><i class="bi bi-upload"></i> Load</button>';
+//     // let readcontentFeature =
+//     //   '<button class="bt-content btn btn-sm btn-secondary"><i class="bi bi-file-text-fill"></i> Contents</button>';
+//     // let resetFeature =
+//     //   '<button class="bt-reset btn btn-danger"><i class="bi bi-arrow-counterclockwise"></i> Reset</button>';
 
-    // if (kit.parsedOptions.feedbacklevel)
-    //   $("#recompose-feedbacklevel")
-    //     .html(feedbacklevelFeature)
-    //     .removeClass("d-none");
-    // else $("#recompose-feedbacklevel").html("").addClass("d-none");
-    // if (kit.parsedOptions.saveload)
-    //   $("#recompose-saveload").html(saveloadFeature).removeClass("d-none");
-    // else $("#recompose-saveload").html("").addClass("d-none");
-    // if (kit.parsedOptions.reset)
-    //   $("#recompose-reset").html(resetFeature).removeClass("d-none");
-    // else $("#recompose-reset").html("").addClass("d-none");
-    // if (kit.parsedOptions.readcontent)
-    //   $("#recompose-readcontent")
-    //     .html(readcontentFeature)
-    //     .removeClass("d-none");
-    // else $("#recompose-readcontent").html("").addClass("d-none");
-    // return;
-  });
-};
+//     // if (kit.parsedOptions.feedbacklevel)
+//     //   $("#recompose-feedbacklevel")
+//     //     .html(feedbacklevelFeature)
+//     //     .removeClass("d-none");
+//     // else $("#recompose-feedbacklevel").html("").addClass("d-none");
+//     // if (kit.parsedOptions.saveload)
+//     //   $("#recompose-saveload").html(saveloadFeature).removeClass("d-none");
+//     // else $("#recompose-saveload").html("").addClass("d-none");
+//     // if (kit.parsedOptions.reset)
+//     //   $("#recompose-reset").html(resetFeature).removeClass("d-none");
+//     // else $("#recompose-reset").html("").addClass("d-none");
+//     // if (kit.parsedOptions.readcontent)
+//     //   $("#recompose-readcontent")
+//     //     .html(readcontentFeature)
+//     //     .removeClass("d-none");
+//     // else $("#recompose-readcontent").html("").addClass("d-none");
+//     // return;
+//   });
+// };
 
 App.parseOptions = (options, defaultValueIfNull) => {
   if (options === null || options === undefined) return defaultValueIfNull;
