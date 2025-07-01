@@ -17,10 +17,19 @@ $(() => { // jQuery onReady callback
 // L.log('action', data);
 class L {
   static log(action, data, extra, options) {
+    try {
+      for(let [k,v] of extra) { // console.log(k, v);
+        if (v == null || v == "undefined") extra.delete(k);
+      }
+    } catch (err) {}
     Logger.log(action, data, extra, options);
   }
-  static dataMap(kid, cmid) {
-    return new Map([["kid", kid],["cmid", cmid]]);
+  static dataMap(kid, cmid, room = null) {
+    let map = new Map([["kid", kid],["cmid", cmid], ["room", room]]);
+    if (!kid) map.delete(kid);
+    if (!cmid) map.delete(cmid);
+    if (!room) map.delete(room);
+    return map;
   }
   static canvas(dataMap, appCanvas) {
     // Remove attribute of image binary data 
@@ -40,6 +49,16 @@ class L {
     learnerMapData.conceptMap = conceptMap;
     // console.log(learnerMapData);
     Analyzer.composePropositions(learnerMapData);
+
+    if (!conceptMap) {
+      console.warn("Compare:", "Invalid conceptMap."); 
+      return;
+    }
+    if (!CDM.conceptMap?.map) {
+      console.warn("Compare:", "Invalid conceptMap CDM.");
+      return;
+    }
+
     let direction = CDM.conceptMap.map.direction;
     let compare = Analyzer.compare(learnerMapData, direction);
     // console.warn(compare);
@@ -114,11 +133,13 @@ class App {
     // console.log(this, typeof KitBuildLogger);
 
     this.handleEvent();
-    this.handleRefresh().then( sessions => { // console.log(sessions);
-      Core.instance().session().getId().then(sessid => {
+    this.handleRefresh().then( (sessions) => { // console.log(sessions);
+      Core.instance().session().getId().then(async (sessid) => {
         sessions.id = sessid
-        if (this.config.get('enablecollab'))
-        this.startCollab(sessions);
+        if (this.config.get('enablecollab')) {
+          let collab = await this.startCollab(sessions);
+          collab?.connectIfPreviouslyConnected();
+        }
       });
       
     });
@@ -407,7 +428,7 @@ class App {
 
     let openDialog = UI.modal("#concept-map-open-dialog", {
       hideElement: ".bt-cancel",
-      width: "700px",
+      width: "400px",
     });
     let contentDialog = UI.modal("#kit-content-dialog", {
       hideElement: ".bt-close",
@@ -549,16 +570,24 @@ class App {
       }, 300);
     });
 
-    $('#concept-map-open-dialog').on('submit', (e) => { e.preventDefault(); console.error(e); });
-
-    $('#concept-map-open-dialog').on('click', '.bt-open-id', (e) => {
+    $('#concept-map-open-dialog').on('submit', (e) => { // console.error(e);
       e.preventDefault();
+      e.stopPropagation();
+      return false; 
+    });
+
+    $('#concept-map-open-dialog').on('click', '.bt-open-id', (e) => { // console.warn(e);
       
       let remember = $('#concept-map-open-dialog input#inputrememberme:checked').val();
       let userid = $('#concept-map-open-dialog input[name="userid"]').val().trim();
       let mapid = $('#concept-map-open-dialog input[name="mapid"]').val().trim();
       let url = Core.instance().config('baseurl') + `mapApi/get/${mapid}`;
-      if (mapid.length == 0) {
+
+      if (userid.trim().length == 0) {
+        UI.warningDialog("Please enter a username or ID.").show();
+        return;
+      }
+      if (mapid.trim().length == 0) {
         UI.warningDialog("Please enter Kit-Build kit ID to open.").show();
         return;
       }
@@ -588,54 +617,54 @@ class App {
       });
     });
 
-    $('#concept-map-open-dialog').on('click', '.bt-open-url', (e) => {
-      e.preventDefault();
-      // let url = Core.instance().config('baseurl') + "mapApi/get";
-      let remember = $('#concept-map-open-dialog input#inputrememberme:checked').val();
-      let userid = $('#concept-map-open-dialog input[name="userid"]').val().trim();
-      let url = $('#concept-map-open-dialog input[name="mapurl"]').val().trim();
-      if (url.length == 0) {
-        UI.warningDialog("Please enter an URL that refer to a Kit-Build kit map data.")
-          .show();
-        return;
-      }
+    // $('#concept-map-open-dialog').on('click', '.bt-open-url', (e) => {
+    //   e.preventDefault();
+    //   // let url = Core.instance().config('baseurl') + "mapApi/get";
+    //   let remember = $('#concept-map-open-dialog input#inputrememberme:checked').val();
+    //   let userid = $('#concept-map-open-dialog input[name="userid"]').val().trim();
+    //   let url = $('#concept-map-open-dialog input[name="mapurl"]').val().trim();
+    //   if (url.length == 0) {
+    //     UI.warningDialog("Please enter an URL that refer to a Kit-Build kit map data.")
+    //       .show();
+    //     return;
+    //   }
 
-      Core.instance().ajax().post(url, {
-        remember: remember ? 1 : 0,
-        userid: userid
-      }).then(result => { // console.log(result.mapdata);
-        let data = App.parseIni(result.mapdata);
-        try {
-          let conceptMap = Core.decompress(data.conceptMap.replaceAll('"',''));
-          let kit = Core.decompress(data.kit.replaceAll('"',''));
-          // console.log(conceptMap, kit);
-          CDM.conceptMap = conceptMap;
-          CDM.kitId = kit.map.id;
-          CDM.conceptMapId = kit.map.cmid;
-          CDM.kit = kit;
-          // console.error(CDM);
-        } catch(e) { console.error(e); }
-        CDM.userid = $('#concept-map-open-dialog input[name="userid"]').val().trim();
-        if (!CDM.conceptMap) { // console.error("X");
-          UI.errorDialog("Invalid concept map data.").show();
-          return;
-        }
-        if (!$('#concept-map-open-dialog input[name="userid"]').val().trim()) {
-          UI.warningDialog("Please enter your name or a user ID.").show();
-          return;
-        }
-        App.openKit().then(() => {
-          App.postOpenKit(userid, remember);
-          openDialog.hide();
-        });
-        // console.log(data);
-        // console.warn("Log status: ", result);
-      }).catch(error => {
-        console.error("Log error: ", error);
-        UI.errorDialog("Invalid concept map data.").show();
-        return;
-      });
-    });
+    //   Core.instance().ajax().post(url, {
+    //     remember: remember ? 1 : 0,
+    //     userid: userid
+    //   }).then(result => { // console.log(result.mapdata);
+    //     let data = App.parseIni(result.mapdata);
+    //     try {
+    //       let conceptMap = Core.decompress(data.conceptMap.replaceAll('"',''));
+    //       let kit = Core.decompress(data.kit.replaceAll('"',''));
+    //       // console.log(conceptMap, kit);
+    //       CDM.conceptMap = conceptMap;
+    //       CDM.kitId = kit.map.id;
+    //       CDM.conceptMapId = kit.map.cmid;
+    //       CDM.kit = kit;
+    //       // console.error(CDM);
+    //     } catch(e) { console.error(e); }
+    //     CDM.userid = $('#concept-map-open-dialog input[name="userid"]').val().trim();
+    //     if (!CDM.conceptMap) { // console.error("X");
+    //       UI.errorDialog("Invalid concept map data.").show();
+    //       return;
+    //     }
+    //     if (!$('#concept-map-open-dialog input[name="userid"]').val().trim()) {
+    //       UI.warningDialog("Please enter your name or a user ID.").show();
+    //       return;
+    //     }
+    //     App.openKit().then(() => {
+    //       App.postOpenKit(userid, remember);
+    //       openDialog.hide();
+    //     });
+    //     // console.log(data);
+    //     // console.warn("Log status: ", result);
+    //   }).catch(error => {
+    //     console.error("Log error: ", error);
+    //     UI.errorDialog("Invalid concept map data.").show();
+    //     return;
+    //   });
+    // });
 
     // $('#concept-map-open-dialog').on('click', '.bt-open', (e) => {
     //   if (!CDM.conceptMap) { 
@@ -666,8 +695,7 @@ class App {
       data.map = {
         cmid: this.conceptMap ? this.conceptMap.map.cmid : App.uuidv4(),
         direction: this.canvas.direction,
-      };
-      console.log(data);
+      }; // console.log(data);
       $("#concept-map-export-dialog .encoded-data").val(
         `conceptMap=${Core.compress(data)}`
       );
@@ -694,7 +722,7 @@ class App {
     $("#concept-map-export-dialog").on("click", ".bt-download-cmap", async (e) => { // console.log(e);
       let cmapdata = $("#concept-map-export-dialog .encoded-data").val().trim();
       App.download(`${CDM.conceptMapId ?? 'untitled'}.cmap`, cmapdata);
-      let dataMap = L.dataMap(CDM.conceptMapId);
+      // let dataMap = L.dataMap(CDM.conceptMapId);
       // L.canvas(dataMap, App.inst.canvas);
       // L.proposition(dataMap, App.inst.canvas);
       // L.log('concept-map-download-cmap', {duration: App.timer.ts}, dataMap);
@@ -729,9 +757,9 @@ class App {
      * Save Load Learner Map
      * */
 
-    $(".app-navbar").on("click", ".bt-save", () => {
-
-      console.log(CDM.kit);
+    $(".app-navbar").on("click", ".bt-save", () => { 
+      
+      // console.log(CDM.kit, CDM.conceptMap);
       
       if (!CDM.kit) {
         UI.dialog('Invalid kit data.').show();
@@ -744,53 +772,8 @@ class App {
 
       // console.log(CDM, App.collab?.getData('mapid'));
       // console.log(App.collab);
-      let {data, lmapdata} = this.buildLearnerMapData(); // console.log(canvas);
-
-      data.type = 'draft';
-      lmapdata.map.type = 'draft';
-      
-      data.room = KitBuildCollab?.getPersonalRoom()?.name;
-      data.id = CDM.kit.map.id;
-      data.mapid = App.collab?.getData('mapid');
-      data.cmid = CDM.kit.map.cmid;
-      data.userid = CDM.userid;
-      data.data = JSON.stringify(lmapdata);
-      data.kitdata = JSON.stringify(CDM.kit);
-      data.cmapdata = JSON.stringify(CDM.conceptMap);
-      data.sessid = App.getCookie(CDM.cookieid);
-
-      // console.log(data, lmapdata); // return;
-
-      let saveToSession = this.session.set('draft-map', Core.compress(data));
-      let saveToCollabMap = this.ajax.post("mapApi/saveCollabMap", data);
-      let saveLearnerMap = this.ajax.post("mapApi/saveLearnerMap", data);
-      let saveMap = (data.room) ? saveToCollabMap : saveLearnerMap;
-      Promise.all([saveToSession, saveMap]).then(result => {
-        // let resultSession = result[0];
-        // let resultCollabMap = result[1];
-
-        let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId);
-        L.canvas(dataMap, App.inst.canvas);
-        L.compare(dataMap, App.inst.canvas, CDM.conceptMap.canvas);
-        L.log('save-draft', {
-          id: data.id,
-          cmid: data.cmid,
-          userid: data.userid,
-          sessid: data.sessid
-        }, dataMap);
-
-        UI.success("Concept map has been saved successfully.").show();
-
-        // data.id = resultCollabMap.id;
-        // data.created = resultCollabMap.created;
-        // data.duration = App.timer.ts;
-        // let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId);
-        // L.canvas(dataMap, App.inst.canvas);
-        // L.compare(dataMap, App.inst.canvas, CDM.conceptMap.canvas);
-        // L.log('save-map', data, dataMap);
-        // UI.info('Map has been saved.').show();
-        
-      });
+      this.saveConceptMap({type: 'draft'})
+        .then(() => UI.success('Concept map has been saved.').show());
 
       // this.session.set('draft-map', Core.compress(data)).then((result) => {
       //   console.log(result);
@@ -825,12 +808,14 @@ class App {
     $(".app-navbar").on("click", ".bt-load", () => {
 
       if (!App.collab?.getData('mapid')) {
-        UI.error('Invalid Map ID').show();
+        $('.dd-saved-maps .saved-maps').html('');
+        UI.error('Cannot load, invalid Map ID').show();
         return;
       }
 
       if (!KitBuildCollab.getPersonalRoom()?.name) {
-        UI.error('Invalid Room').show();
+        UI.error('Cannot load, invalid Room').show();
+        $('.dd-saved-maps .saved-maps').html('');
         return;
       }
 
@@ -839,20 +824,21 @@ class App {
       console.log(KitBuildCollab.getPersonalRoom().name, App.collab?.getData('mapid'));
 
       this.ajax.get(`mapApi/getCollabMapList/${room}/${mapid}/8`).then((maps) => {
-        console.log(maps);
         let mapsHtml = '';
-        for(let map of maps) {
-          let type = (map.type == 'draft') ? 'warning' : 'success'
-          mapsHtml += `<li>`
-          mapsHtml += `<a class="dropdown-item fs-6 d-flex flex-column justify-content-between align-items-center item-saved-map" href="#" data-id="${map.id}">`;
-          mapsHtml += `<span>${map.userid}</span>`;
-          mapsHtml += `<span>`;
-          mapsHtml += `<span class="badge text-bg-${type} me-2"> </span>`;
-          mapsHtml += `<code class="text-danger">${map.created}</code>`;
-          mapsHtml += `</span>`;
-          mapsHtml += `</a>`;
-          mapsHtml += `</li>`;
-        }
+        if (maps?.length > 0) {
+          for(let map of maps) {
+            let type = (map.type == 'draft') ? 'warning' : 'success'
+            mapsHtml += `<li>`
+            mapsHtml += `<a class="dropdown-item fs-6 d-flex flex-column justify-content-between align-items-center item-saved-map" href="#" data-id="${map.id}">`;
+            mapsHtml += `<small>${map.userid}</small>`;
+            mapsHtml += `<small>`;
+            mapsHtml += `<span class="badge text-bg-${type} me-2"> </span>`;
+            mapsHtml += `<code class="text-danger">${map.created}</code>`;
+            mapsHtml += `</small>`;
+            mapsHtml += `</a>`;
+            mapsHtml += `</li>`;
+          }
+        } else mapsHtml = '<li><a href="#" class="dropdown-item fs-6 text-muted fst-italic"><i class="bi bi-exclamation-triangle"></i><small class="ms-2 text-danger">No saved data.</small></a></li>';
         $('.dd-saved-maps .saved-maps').html(mapsHtml);
       });
 
@@ -971,7 +957,7 @@ class App {
     $('ul.saved-maps').on('click', 'a.item-saved-map', (e) => {
       let id = $(e.currentTarget).attr('data-id');
       let confirm = UI.confirm(
-        "Load selected map?<br>Loaded map will be synchronized to all members in room."
+        `Load selected map?<br>Loaded map will be <strong class="text-primary">synchronized</strong> to all team members in the room.`
       ).emphasize().positive(() => {
         App.collab.loadCollabMap(id);
         confirm.hide();
@@ -994,20 +980,36 @@ class App {
       if (feedbackDialog.learnerMapEdgesData)
         $(".app-navbar .bt-clear-feedback").trigger("click");
 
-      let confirm = UI.confirm(
-        "Do you want to reset this concept map as defined in the kit?"
-      ).positive(() => {
-        App.openKit(CDM.kit, CDM.conceptMap).then(
-          (result) => {
-            let undoRedo = this.canvas.toolbar.tools.get(KitBuildToolbar.UNDO_REDO);
-            if (undoRedo) undoRedo.clearStacks().updateStacksStateButton();
-            UI.info("Concept map has been reset.").show();
-            confirm.hide();
-            // TODO: sync 
-            // App.lastFeedback = App.timer.ts;
-          },
-          (error) => UI.error(error).show()
-        );
+      let question = (App.collab)
+        ? `Do you want to reset this concept map as the initial kit/concept map?<br><span class="text-danger">Your team concept map will also reset.</span> <strong>Continue?</strong>`
+        : `Do you want to <span class="text-danger">reset</span> this concept map as the initial kit/concept map?`
+      let confirm = UI.confirm(question).positive(() => {
+
+        // let canvasJsons = this.canvas.cy.elements().jsons();
+        // let dataMap = new Map([
+        //   ['kid', CDM.kitId],
+        //   ['cmid', CDM.conceptMapId],
+        //   ['canvas', Core.compress(canvasJsons)],
+        // ]);
+        let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId, CDM.room);
+        L.canvas(dataMap, App.inst.canvas); 
+        L.compare(dataMap, App.inst.canvas, CDM.conceptMap.canvas);
+        L.log("reset", CDM.kitId, dataMap);
+
+        if (App.collab) App.collab?.send("command", "reset");
+        else {
+          App.openKit(CDM.kit, CDM.conceptMap).then(
+            (result) => {
+              let undoRedo = this.canvas.toolbar.tools.get(KitBuildToolbar.UNDO_REDO);
+              if (undoRedo) undoRedo.clearStacks().updateStacksStateButton();
+              UI.info("Concept map has been reset.").show();
+              confirm.hide();
+              // TODO: sync 
+              // App.lastFeedback = App.timer.ts;
+            },
+            (error) => UI.error(error).show()
+          );
+        }
         // App.parseKitMapOptions(CDM.kit);
         // App.resetMapToKit(CDM.kit, this.canvas).then(() => {
         //   // Remove attribute of image binary data 
@@ -1044,6 +1046,7 @@ class App {
         // });
         return;
       })
+      .negative(() => confirm.hide())
       .show();
     });
 
@@ -1152,7 +1155,7 @@ class App {
           })
           .show();
       } else feedbackDialog.setCompare(compare, dialogLevel).show();
-      let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId);
+      let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId, CDM.room);
       // dataMap.set('compare', JSON.stringify(compare));
       L.canvas(dataMap, App.inst.canvas);
       L.compare(dataMap, App.inst.canvas, CDM.conceptMap.canvas);
@@ -1176,7 +1179,7 @@ class App {
         .clearCanvas()
         .clearIndicatorCanvas();
       feedbackDialog.learnerMapEdgesData = null;
-      let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId);
+      let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId, CDM.room);
       L.log("resume-feedback", undefined, dataMap);
       $(".app-navbar .bt-feedback").prop('disabled', false);
       $(".app-navbar .bt-clear-feedback").prop('disabled', true);
@@ -1238,7 +1241,7 @@ class App {
               reason: reason,
               timestamp: App.timer.ts
             }, nodes[0].data());
-            let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId);
+            let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId, CDM.room);
             L.canvas(dataMap, App.inst.canvas);
             L.compare(dataMap, App.inst.canvas, CDM.conceptMap.canvas);
             L.log('get-reference', data, dataMap);
@@ -1268,8 +1271,7 @@ class App {
           .clearCanvas()
           .clearIndicatorCanvas();
   
-        let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId);
-        // dataMap.set('compare', Core.compress(compare));
+        let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId, CDM.room);
         L.canvas(dataMap, App.inst.canvas);
         L.compare(dataMap, App.inst.canvas, CDM.conceptMap.canvas);
         L.log("feedback-distance", {
@@ -1298,30 +1300,63 @@ class App {
       if (feedbackDialog.learnerMapEdgesData)
         $(".app-navbar .bt-clear-feedback").trigger("click");
       let confirm = UI.confirm(
-        "Do you want to submit your concept map?<br/>This will end your concept map recomposition session."
+        "Do you want to submit your concept map?<br/>This will be marked as the end your concept map session."
       ).positive(() => {
-        console.warn(CDM);
-        let { data, lmapdata } = this.buildLearnerMapData();
-        console.log(data, lmapdata); // return
         confirm.hide();
-        // return;
-        this.ajax
-          .post("mapApi/saveLearnerMap", data)
-          .then(learnerMap => { console.log(learnerMap);
-            data.id = learnerMap.id;
-            data.created = learnerMap.created;
-            data.duration = App.timer.ts;
-            let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId);
+        this.saveConceptMap({type: 'final'})
+          .then((result) => {
+            UI.dialog("Concept map has been submitted.").show();
+            let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId, CDM.room);
             L.canvas(dataMap, App.inst.canvas);
             L.compare(dataMap, App.inst.canvas, CDM.conceptMap.canvas);
-            L.log('submit', data, dataMap);
-            UI.dialog('Your final concept map has been submitted. You may now close this window.').show();
-          }).catch((error) => {
-            console.error(error);
+            L.log('submit', null, dataMap);            
           });
         }).show();
     });
 
+  }
+
+  saveConceptMap(options) {
+    return new Promise((resolve, reject) => {
+      let settings = Object.assign({
+        type: 'draft'
+      }, options);
+      let { data, lmapdata } = this.buildLearnerMapData(); // console.log(canvas);
+
+      data.type = settings.type;
+      lmapdata.map.type = settings.type;
+
+      data.room = KitBuildCollab?.getPersonalRoom()?.name;
+      data.id = CDM.kit.map.id;
+      data.mapid = App.collab?.getData('mapid');
+      data.cmid = CDM.kit.map.cmid;
+      data.userid = CDM.userid;
+      data.data = JSON.stringify(lmapdata);
+      data.kitdata = JSON.stringify(CDM.kit);
+      data.cmapdata = JSON.stringify(CDM.conceptMap);
+      data.sessid = App.getCookie(CDM.cookieid);
+
+      // console.log(data, lmapdata); // return;
+      let saveToSession = this.session.set('draft-map', Core.compress(data));
+      let saveToCollabMap = this.ajax.post("mapApi/saveCollabMap", data);
+      let saveLearnerMap = this.ajax.post("mapApi/saveLearnerMap", data);
+      let saveMap = (data.room) ? saveToCollabMap : saveLearnerMap;
+      Promise.all([saveToSession, saveMap]).then(result => {
+        // let resultSession = result[0];
+        // let resultCollabMap = result[1];
+        let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId, CDM.room);
+        L.canvas(dataMap, App.inst.canvas);
+        L.compare(dataMap, App.inst.canvas, CDM.conceptMap.canvas);
+        L.log(`save-${settings.type}`, {
+          id: data.id,
+          cmid: data.cmid,
+          userid: data.userid,
+          sessid: data.sessid
+        }, dataMap);
+        resolve(result);
+      }).catch((err) => reject(err));
+    });
+    
   }
 
   unpackMapkit(result) {
@@ -1330,12 +1365,6 @@ class App {
       let conceptMap = Core.decompress(data.conceptMap.replaceAll('"', ''));
       let kit = Core.decompress(data.kit.replaceAll('"', ''));
       return { conceptMap, kit }
-      // console.log(conceptMap, kit);
-      // CDM.conceptMap = conceptMap;
-      // CDM.kitId = kit.map.id;
-      // CDM.conceptMapId = kit.map.cmid;
-      // CDM.kit = kit;
-      // console.error(CDM);
     } catch (e) { console.error(e); }
     return {}
   }
@@ -1414,36 +1443,82 @@ class App {
 
   }
 
-  async startCollab(session = null) { console.log(session);
+  async startCollab(session = null) { // console.log(session);
     App.collab = await KitBuildCollab.instance('kitbuild', this.canvas, {
       host: this.config.get('collabhost'),
       port: this.config.get('collabport'),
       path: this.config.get('collabpath'),
       listener: this.onCollabEvent.bind(this),
       session: session
-    });
+    }); // console.log(App.collab);
     if (session?.mapid)
-      App.collab?.setData('mapid', session.mapid);
+      await App.collab?.setData('mapid', session.mapid);
     KitBuildCollab.enableControl();
+    return App.collab;
   }
 
   // Collab Server --> App
-  onCollabEvent(e, ...data) { console.warn("App", e, data);      
+  onCollabEvent(e, ...data) { console.warn("Consuming collaboration event:", e, data);
     switch(e) {
       case 'reconnected':
       case 'connected':
-        App.collab?.registerUser(decodeURI(App.getCookie('userid')));
-        CDM.userid = App.collab.getCollabId();
-        this.session.set('userid', CDM.userid);
-        Logger.userid = CDM.userid;
-        // console.log(App.collab?.getCollabId());
+        // check id from cookie
+        let userid = decodeURIComponent(App.getCookie('userid')); console.log("Cookie", userid);
+        if (userid == null || userid == "null" || userid == "undefined") {
+          userid = decodeURIComponent(App.collab?.getCollabId()); console.log("Collab", userid);
+        }
+        console.log("Set", userid);
+        if (userid != null && userid != "null" && userid != "undefined") {
+          // console.log(userid);
+          // console.log(Core.instance().cookie());
+          Core.instance().cookie().set('userid', userid);
+          // .then((e)=> console.log(e, userid));
+          App.collab?.registerUser(userid);
+          CDM.userid = userid;
+          Logger.userid = userid;
+          this.session.set('userid', userid);
+        }
+        let dataMap = L.dataMap(null, null, CDM.room);
+        L.log(e, userid, dataMap);
         break;
+      case 'socket-disconnect':
+      case 'disconnect': {
+        L.log(e);
+      } break;
+      case 'join-room': {
+        let room = data.shift();
+        CDM.room = room;
+        let dataMap = L.dataMap(null, null, CDM.room);
+        L.log("join-room", room, dataMap);
+      } break;
+      case 'user-unregistered': {
+        let user = data.shift();
+        App.removeCookie('userid');
+        // Core.instance().cookie().unset('userid');
+        L.log(e, user);
+      } break;
       case 'socket-command': {
         let command = data.shift();
         switch(command) {
           case 'push-map-state':
             this.applyMapState(data.shift());
+            let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId, CDM.room);
+            L.log("socket-push-map-state", CDM.room, dataMap);
             break;
+          case 'reset': {
+            App.openKit(CDM.kit, CDM.conceptMap).then(
+              (result) => {
+                let undoRedo = this.canvas.toolbar.tools.get(KitBuildToolbar.UNDO_REDO);
+                if (undoRedo) undoRedo.clearStacks().updateStacksStateButton();
+                UI.info("Concept map has been reset.").show();
+                let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId, CDM.room);
+                L.canvas(dataMap, App.inst.canvas);
+                L.compare(dataMap, App.inst.canvas, CDM.conceptMap.canvas);
+                L.log("socket-command-reset", CDM.room, dataMap);
+              },
+              (error) => UI.error(error).show()
+            );
+          } break;
         }
       } break;
       case 'socket-get-map-state': {
@@ -1451,35 +1526,66 @@ class App {
         this.generateMapState()
           .then(mapState => { // console.log(mapState);
             App.collab.send("send-map-state", requesterSocketId, mapState);
+            let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId, CDM.room);
+            L.canvas(dataMap, App.inst.canvas);
+            L.compare(dataMap, App.inst.canvas, CDM.conceptMap.canvas);
+            L.log("send-map-state", {requesterSocketId: requesterSocketId}, dataMap);
           })
       }  break;
       case 'socket-set-map-state': {
         let mapState = data.shift(); // console.log(mapState);
         this.applyMapState(mapState).then(() => { // console.log(this);
           App.collab.send("get-channels");
+          let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId, CDM.room);
+          L.canvas(dataMap, App.inst.canvas);
+          L.compare(dataMap, App.inst.canvas, CDM.conceptMap.canvas);
+          L.log("set-map-state", mapState, dataMap);
         });
       }  break;
       case 'join-room-request': {
         let room = data.shift();
-        let confirm = UI.confirm(`You have been requested to join room <strong>${room}</strong>. Do you want to accept?`)
+        let redrawDialog = false;
+        if(App.confirmDialog?._isShown) App.confirmDialog.hide();
+        // console.log(App.confirmDialog);
+        App.confirmDialog = UI.confirm(`You have been requested to join room <strong>${room}</strong>. Do you want to accept?`)
+          .noDismiss()
           .emphasize()
           .positive(() => {
             App.collab.joinRoom(room, App.collab.user).then(e => {
               App.collab.broadcastEvent('join-room', room);
               UI.info(`Room ${room} joined.`).show();
+              CDM.room = room;
+              let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId, CDM.room);
+              L.log("join-room", CDM.room, dataMap);
             });
           })
-          .negative(() => {
-            App.collab.rejectjoinRoomRequest(room, App.collab.user).then(e => {
-              // console.log(this, confirm);
-              // confirm.hide();
-            });
+          .negative((e) => {
+            // console.log(e.delegateTarget);
+            // if (!redrawDialog)
+            let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId, CDM.room);
+            L.log("reject-join-room", CDM.room, dataMap);
+            App.collab.rejectjoinRoomRequest(room, App.collab.user);
           })
           .show();
+      } break;
+      case 'socket-user-join-room': {
+        let user = data.shift();
+        let room = data.shift();
+        if (user.socketId == App.collab?.socket?.id) {
+          Core.instance()?.cookie()?.set('userid', user?.name);
+          //.then((e) => console.log(e));
+          // CDM.room = room
+        }
+        // console.log(data, App.collab);
       } break;
       case 'socket-user-leave-room': {
         let user = data.shift();
         let room = data.shift();
+
+        let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId, CDM.room);
+        L.log("leave-room", {user: user, room: CDM.room}, dataMap);
+        
+        delete CDM.room;
         UI.info(`You have left Room: <strong>${room.name}</strong>.`)
           .show();
       } break;
@@ -1504,7 +1610,15 @@ class App {
         let { conceptMap, kit } = this.unpackMapkit(mapkit);
         this.setKitCDM(kit, conceptMap);
         App.openKit(kit, conceptMap).then(
-          (result) => {},
+          (result) => {
+            let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId, CDM.room);
+            let data = {
+              room: App.collab?.getPersonalRoom()
+            }
+            L.canvas(dataMap, App.inst.canvas);
+            L.compare(dataMap, App.inst.canvas, CDM.conceptMap.canvas);
+            L.log('open-mapkit', data, dataMap);
+          },
           (error) => UI.error(error).show()
         );
       } break;
@@ -1535,29 +1649,37 @@ class App {
           let draftData = Object.assign({
             sessid: sessid,
             psessid: collabMap.sessid,
-            collabmap: id
+            collabmap: id,
+            room: CDM.room
           }, map);
           delete draftData.data;
           delete draftData.cmapdata;
           delete draftData.kitdata;
 
-          let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId);
+          let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId, CDM.room);
           L.canvas(dataMap, App.inst.canvas);
           L.compare(dataMap, App.inst.canvas, CDM.conceptMap.canvas);
-          L.log('load-draft', draftData, dataMap);
-          // App.lastFeedback = App.timer.ts;
-          // App.postOpenKit();
-          // this.openMapkit(mapkit);
-          // App.openKit().then(
-          //   (result) => {},
-          //   (error) => UI.error(error).show()
-          // );
-          // this.openMapkit(mapkit);
-          // let room = KitBuildCollab.getPersonalRoom()?.name;
-          console.log(mapkit);
-          // App.collab.pushMapkit(mapkit, room);
+          L.log('load-collabmap', draftData, dataMap);
+          UI.info("Concept map has been loaded from saved data.").show();
         });        
-      }
+      } break;
+      case 'message': {
+        let mData = data.shift();
+        let room = data.shift();
+        let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId, CDM.room);
+        L.canvas(dataMap, App.inst?.canvas);
+        L.compare(dataMap, App.inst?.canvas, CDM.conceptMap?.canvas);
+        L.log(e, {message: mData, room: room}, dataMap);
+      } break;
+      case 'channel-message': {
+        let mData = data.shift();
+        let room = data.shift();
+        let id = data.shift();
+        let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId, CDM.room);
+        L.canvas(dataMap, App.inst.canvas);
+        L.compare(dataMap, App.inst.canvas, CDM.conceptMap.canvas);
+        L.log(e, {message: mData, room: room, channelId: id}, dataMap);
+      } break;
     }
   }
 
@@ -1683,7 +1805,7 @@ App.onCanvasEvent = (canvasId, event, data) => {
     return;
   }
 
-  let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId);
+  let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId, CDM.room);
   if (!skip.includes(event))
     L.canvas(dataMap, App.inst.canvas);
   if (event.includes("connect"))
@@ -1739,23 +1861,23 @@ App.openKit = (kit, conceptMap) => {
     }, { duration: 0 }));
     KitBuildUI.showBackgroundImage(canvas);
     CDM.options = CDM.kit.map.options;
-    let canvasJsons = canvas.cy.elements().jsons();
-    let dataMap = new Map([
-      ['kid', CDM.kitId],
-      ['cmid', CDM.conceptMapId],
-      ['canvas', Core.compress(canvasJsons)]
-    ]);
-
-    let learnerMapData = KitBuildUI.buildConceptMapData(App.inst.canvas);
-    learnerMapData.conceptMap = CDM.conceptMap.canvas;
+    // let canvasJsons = canvas.cy.elements().jsons();
+    // let dataMap = new Map([
+    //   ['kid', CDM.kitId],
+    //   ['cmid', CDM.conceptMapId],
+    //   ['canvas', Core.compress(canvasJsons)]
+    // ]);
+    // let learnerMapData = KitBuildUI.buildConceptMapData(App.inst.canvas);
+    // learnerMapData.conceptMap = CDM.conceptMap.canvas;
     // console.log(learnerMapData);
-    let result = Analyzer.composePropositions(learnerMapData);
+    // let result = Analyzer.composePropositions(learnerMapData);
     // console.log(result, learnerMapData);
-    let direction = CDM.conceptMap.map.direction;
+    // let direction = CDM.conceptMap.map.direction;
     // let compare = Analyzer.compare(learnerMapData, direction);
     // console.warn(compare);
     // dataMap.set('compare', JSON.stringify(compare));  
-
+    let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId, CDM.room);
+    L.canvas(dataMap, App.inst.canvas);
     App.inst.session.regenerateId().then(sessid => {
       Logger.sessid = App.getCookie(CDM.cookieid);
       Logger.seq = 1;
@@ -1769,7 +1891,7 @@ App.openKit = (kit, conceptMap) => {
 
 App.postOpenKit = (userid, remember = true) => {
   if (remember) Core.instance().cookie().set('userid', userid);
-  else Core.instance().cookie().unset('userid');
+  else App.removeCookie('userid'); // Core.instance().cookie().unset('userid');
   App.timer = new Timer('.app-navbar .timer');
   App.timer.on();
   App.lastFeedback = App.timer.ts;
@@ -1932,6 +2054,10 @@ App.parseOptions = (options, defaultValueIfNull) => {
 App.getCookie = (name) => {
   let value = Core.instance().cookie().getCookie(name);
   return value;
+}
+App.removeCookie = async (name) => {
+  const status = await Core.instance().cookie().unset(name);
+  console.warn("Removing cookie:", name, App.getCookie(name));
 }
 
 App.duration = (seconds) => {

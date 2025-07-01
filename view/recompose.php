@@ -50,10 +50,11 @@
   <div class="card-body mb-3">
 
     <h4 class="mx-3 my-2 d-flex justify-content-between align-items-center">
-      Open Kit <button class="btn btn-lg bt-cancel"><i class="bi bi-x-lg"></i></button>
+      Open Kit 
+      <span class="btn btn-lg bt-cancel text-secondary p-0"><i class="bi bi-x-lg"></i></span>
     </h4>
 
-    <!-- <div class="p-3 m-3 border bg-light"> -->
+
     <div class="input-group p-3">
       <input type="text" class="form-control" name="userid" placeholder="Enter your name or ID" />
       <div class="form-check input-group-text">
@@ -61,26 +62,15 @@
         <label class="form-check-label" for="inputrememberme">Remember Me</label>
       </div>
     </div>
-    <!-- </div> -->
 
-    <ul class="nav nav-pills px-3 mb-3" id="pills-tab" role="tablist">
-      <li class="nav-item" role="presentation">
-        <button class="nav-link active" id="pills-id-tab"
-          data-bs-toggle="pill" data-bs-target="#pills-id" type="button" role="tab"
-          aria-controls="pills-id" aria-selected="true">Kit-Build ID</button>
-      </li>
-      <li class="nav-item" role="presentation">
-        <button class="nav-link" id="pills-url-tab" data-bs-toggle="pill"
-          data-bs-target="#pills-url" type="button" role="tab"
-          aria-controls="pills-url" aria-selected="false" disabled="disabled">URL</button>
-      </li>
-      <li class="nav-item" role="presentation">
-        <button class="nav-link" id="pills-file-tab" data-bs-toggle="pill"
-          data-bs-target="#pills-file" type="button" role="tab"
-          aria-controls="pills-file" aria-selected="false" disabled="disabled">File</button>
-      </li>
-    </ul>
-    <div class="tab-content" id="pills-tabContent">
+    <div class="input-group px-3">
+      <input type="text" class="form-control" name="mapid" placeholder="Enter concept map ID" value="<?php if (isset($conceptMapId)) echo $conceptMapId; ?>">
+      <button class="btn btn-primary bt-open-id"><i class="bi bi-folder2-open"></i> 
+        <span>Open Map</span>
+      </button>
+    </div>
+
+    <!-- <div class="tab-content" id="pills-tabContent">
       <div class="tab-pane fade show active px-3" id="pills-id" role="tabpanel"
         aria-labelledby="pills-id-tab">
         <div class="input-group">
@@ -112,18 +102,25 @@
         <a class="bt-open btn btn-primary px-3 mt-3" style="min-width: 8rem;">
           <i class="bi bi-folder2-open"></i> Open from File</a>
       </div>
-    </div>
-
-    <!-- <hr> -->
-    <!-- <div class="row">
-      <div class="col text-end mx-3">
-        <a class="bt-cancel btn btn-secondary" style="min-width: 6rem;"><?php echo Lang::l('cancel'); ?></a>
-      </div>
     </div> -->
-
+    <!-- <ul class="nav nav-pills px-3 mt-3" id="pills-tab" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="pills-id-tab"
+          data-bs-toggle="pill" data-bs-target="#pills-id" type="button" role="tab"
+          aria-controls="pills-id" aria-selected="true">Kit-Build ID</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="pills-url-tab" data-bs-toggle="pill"
+          data-bs-target="#pills-url" type="button" role="tab"
+          aria-controls="pills-url" aria-selected="false" disabled="disabled">URL</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="pills-file-tab" data-bs-toggle="pill"
+          data-bs-target="#pills-file" type="button" role="tab"
+          aria-controls="pills-file" aria-selected="false" disabled="disabled">File</button>
+      </li>
+    </ul> -->
   </div>
-  <!-- <div class="card-footer">
-  </div> -->
 </form>
 
 <div id="concept-map-export-dialog" class="card d-none">
