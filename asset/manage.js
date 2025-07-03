@@ -42,7 +42,7 @@ class App {
       // console.log(el, container, $(container).children(`.client[data-socketid]`));
     });
     drake.on('drop', (el, target, source, sibling) => {
-      console.log('drop', el, target, source, sibling);
+      // console.log('drop', el, target, source, sibling);
       let t = $(target).attr('id');
       let s = $(source).attr('id');
       let socketId = $(el).attr('data-socketid');
@@ -64,11 +64,11 @@ class App {
             drake.cancel(true);
             return;
           }
-          App.manager.inviteUserToRoom(socketId, room).then(result => {
+          App.manager.inviteUserToRoom(socketId, room).then(({result, message}) => {
             if (result) {
               $('#room-socket-list').find(`.client[data-socketid="${socketId}"] .bt-invite`).removeClass('btn-outline-primary').addClass('btn-success');
-            } 
-            console.log(result);
+            } else $('#room-socket-list').find(`.client[data-socketid="${socketId}"]`).fadeOut('fast', function() { this.remove(); });
+            console.log(result, message);
           });
           break;
       }
