@@ -25,7 +25,7 @@ class KitBuildReferenceTool extends KitBuildCanvasTool {
 
   async action(event, e, nodes) {
     // let data = nodes[0].data();
-    console.log(nodes);
+    // console.log(nodes);
     if (this.settings.actionCallback)
       this.settings.actionCallback?.onReferenceAction(nodes);
 

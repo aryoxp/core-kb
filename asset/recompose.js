@@ -961,7 +961,8 @@ class App {
       ).emphasize().positive(() => {
         App.collab.loadCollabMap(id);
         confirm.hide();
-      }).show();
+      }).negative(() => confirm.hide())
+      .show();
     });
 
     /**
@@ -1189,7 +1190,7 @@ class App {
       let inf = $('#feedback-nearby-dialog .inputinformation').prop('checked');
       let und = $('#feedback-nearby-dialog .inputunderstand').prop('checked');
       let oth = $('#feedback-nearby-dialog .inputotherreason').val().trim();
-      console.log(inf, und, oth);
+      // console.log(inf, und, oth);
 
       let reason = [];
       if (inf) reason.push('inf');
@@ -1214,6 +1215,7 @@ class App {
           let page = nodes[0].data().respage;
           let keyword = nodes[0].data().reskeyword;
           let cmid = CDM.kit.map.cmid;
+          let nodeData = nodes[0].data();
   
           var showReference = (result) => {
             let pdfData = atob(result.data.split(',')[1]);
@@ -1230,6 +1232,10 @@ class App {
                 page: page,
                 keyword: keyword,
                 fileName: id
+              });
+              // console.log(PDFApp.app, PDFApp.inst);
+              PDFApp.app.on('event', (e, data) => {
+                if (e == 'hide') L.log('close-reference', nodeData);
               });
               PDFApp.app.load();
             }
@@ -1322,7 +1328,7 @@ class App {
         type: 'draft'
       }, options);
       let { data, lmapdata } = this.buildLearnerMapData(); // console.log(canvas);
-
+      // console.log(data, lmapdata);
       data.type = settings.type;
       lmapdata.map.type = settings.type;
 
@@ -1435,7 +1441,7 @@ class App {
     //   }
     // }
 
-    console.warn(nodes);
+    // console.warn(nodes);
 
     App.inst.feedbackNearbyDialog.nodeId = nodes[0].data().id;
     App.inst.feedbackNearbyDialog.nodes = nodes;
@@ -1613,7 +1619,7 @@ class App {
           (result) => {
             let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId, CDM.room);
             let data = {
-              room: App.collab?.getPersonalRoom()
+              room: KitBuildCollab?.getPersonalRoom()
             }
             L.canvas(dataMap, App.inst.canvas);
             L.compare(dataMap, App.inst.canvas, CDM.conceptMap.canvas);
@@ -1626,7 +1632,7 @@ class App {
         let id = data.shift();
         // console.log(id);
         this.ajax.get(`mapApi/getCollabMap/${id}`).then(map => {
-          console.log(map);
+          // console.log(map);
           let mapkit = JSON.parse(map.data);
           let conceptMap = JSON.parse(map.cmapdata);
           let kit = JSON.parse(map.kitdata);

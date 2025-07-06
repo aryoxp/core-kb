@@ -360,7 +360,7 @@ class App {
         UI.warning(`Join room requested has been rejected.<br>User ${user.name} of room ${room}.`).show();
       } break;
       case 'get-map-state': {
-        console.log(data);
+        console.log("Somebody is requesting map state here...", data);
         let callback = data.pop();
         if (typeof callback == "function") callback(false);
       } break;
@@ -518,7 +518,7 @@ class App {
     $('.bt-refresh-rooms').trigger('click');
   }
 
-  addUser(container, user) { console.log(user);
+  addUser(container, user) { console.log("Add user:", user);
     let el = $(container)
       .find(`.client[data-socketid="${user.socketId}"]`);
     // console.log(user, el);
@@ -536,7 +536,7 @@ class App {
     // skipping "check" connection
     if (!user) return;
 
-    console.log(user.name);
+    console.log("User to add:", user.name);
 
     let html = '';
     html += `<div data-socketid="${user.socketId}" `;

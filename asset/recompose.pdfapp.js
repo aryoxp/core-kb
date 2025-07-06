@@ -20,6 +20,7 @@ class PDFApp {
         'MDAwIG4gCjAwMDAwMDAzODAgMDAwMDAgbiAKdHJhaWxlcgo8PAogIC9TaXplIDYKICAvUm9v' +
         'dCAxIDAgUgo+PgpzdGFydHhyZWYKNDkyCiUlRU9G')
     }, options);
+    this.eventListeners = new Set();
     this.init();
     this.handleEvent();
   }
@@ -151,6 +152,18 @@ class PDFApp {
     UI.makeResizable(this.container, {handle: '.bt-resize'});
     UI.makeDraggable(this.container, {handle: '.drag-handle'});
   };
+  
+  on(e = 'event', listener) {
+    if (e == 'event' && typeof listener == 'function') {
+      this.eventListeners.add(listener);
+      PDFApp.modal.on('event', listener);
+      // UI.addListener(listener);
+    }
+  }
+
+  broadcastEvent(e, ...data) {
+    this.eventListeners.forEach(l => l(e, ...data));
+  } 
 
   async load() {
     const pdfDocument = await this.loadingTask.promise;
