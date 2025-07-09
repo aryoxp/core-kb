@@ -144,6 +144,8 @@ class App {
       
     });
 
+    this.autoFeedback = AutoFeedback.instance(this.canvas);
+
   }
 
   static instance() {
@@ -808,14 +810,14 @@ class App {
     $(".app-navbar").on("click", ".bt-load", () => {
 
       if (!App.collab?.getData('mapid')) {
-        $('.dd-saved-maps .saved-maps').html('');
+        $('.dd-saved-maps .saved-maps').html('<li class="text-center text-muted"><em>No Data.</em></li>');
         UI.error('Cannot load, invalid Map ID').show();
         return;
       }
 
       if (!KitBuildCollab.getPersonalRoom()?.name) {
         UI.error('Cannot load, invalid Room').show();
-        $('.dd-saved-maps .saved-maps').html('');
+        $('.dd-saved-maps .saved-maps').html('<li class="text-center text-muted"><em>No Data.</em></li>');
         return;
       }
 
@@ -963,6 +965,58 @@ class App {
         confirm.hide();
       }).negative(() => confirm.hide())
       .show();
+    });
+
+    /**
+     * Peer map viewer
+     */
+
+    $('ul.peer-maps').on('click', 'a.item-peer-map', (e) => {
+      let userid = $(e.currentTarget).attr('data-userid');
+      const filename = userid.split("/")[0];
+      const basefileurl = Core.instance().config('basefileurl');
+      // console.log(Core, filename, Core.instance().config('basefileurl'), App.collab);
+      const mapid = App.collab?.getData('mapid');
+      const url = `${basefileurl}files/peermaps/${mapid}/${filename}.png`;
+      // console.log(url);
+      App.peerDialog = 
+        UI.modal('#peer-map-dialog', {
+          width: '90%', height: 600, 
+          hideElement: '.bt-close',
+          backdrop: false,
+          keyboard: false,
+          onShow: (e, data) => {
+            console.log(e, data);
+            let imguserid = $('.peer-image').attr('data-userid') ?? undefined;
+            if (!imguserid) $('.peer-image').attr('data-userid', userid);
+            if (imguserid != userid) {
+              console.log('loading...');
+              $('.peer-image').attr('src', url).one('load', (e) => {
+                const w = $('.peer-image').attr('data-width') ?? $('.peer-image').width();
+                console.log('loaded!');
+                $('.peer-image').attr('data-userid', userid);
+                $('.peer-image').attr('data-width', w);
+                $('.peer-image').width(w * 0.4);                
+              });
+
+            }
+            $('.peer-name').html(userid);
+          }
+        }).show();
+      UI.makeResizable('#peer-map-dialog', {handle: '.bt-resize'});
+      UI.makeDraggable('#peer-map-dialog', {handle: '.drag-handle'});
+      App.peerDialog.on('event', (e, data) => {
+        console.log(e, data);
+      })
+    });
+
+    $('.bt-load-reciprocal-map').on('click', async (e) => {
+      let room = KitBuildCollab?.getPersonalRoom()?.name;
+      if (!room) {
+        UI.error('Not in a Room.').show();
+        return;
+      }
+      App.collab?.send('command', 'load-reciprocal-map', room);
     });
 
     /**
@@ -1464,7 +1518,7 @@ class App {
   }
 
   // Collab Server --> App
-  onCollabEvent(e, ...data) { console.warn("Consuming collaboration event:", e, data);
+  async onCollabEvent(e, ...data) { console.warn("Consuming collaboration event:", e, data);
     switch(e) {
       case 'reconnected':
       case 'connected':
@@ -1525,6 +1579,69 @@ class App {
               (error) => UI.error(error).show()
             );
           } break;
+          case 'load-reciprocal-map': {
+            const room = data.shift();
+            const pairs = await this.ajax.post(`collabApi/getRoomPairs`, {
+              room: room.split("/")[1]
+            });
+            // console.log(pairs);
+
+            const basefileurl = Core.instance().config('basefileurl');
+            const mapid = App.collab?.getData('mapid');
+
+            let promises = [];
+            for(const pair of pairs) {
+              const filename = pair?.userid?.split("/")[0];
+              const url = `${basefileurl}files/peermaps/${mapid}/${filename}.cmap`;
+              promises.push(this.ajax.get(url));
+            }
+            const results = await Promise.allSettled(promises);
+            // console.log(results);
+            const linkTargets = new Set();
+            const commonLinkTargets = new Set();
+            const cmapLinkTargets = new Set();
+            CDM.conceptMap?.canvas?.linktargets?.forEach(lt => {
+              cmapLinkTargets.add(`${lt.lid}-${lt.target_cid}`);
+            });
+            results.forEach(result => {
+              if (result.status == 'fulfilled') {
+                const mapData = result?.value?.replace("conceptMap=", "");
+                const data = Core.decompress(mapData);
+                // console.log(data);
+                // compare with goal map
+                // data?.canvas?.linktargets.forEach(linkTarget => {
+                //   if (cmapLinkTargets.has(`${linkTarget.lid}-${linkTarget.target_cid}`))
+                //     commonLinkTargets.add(`${linkTarget.lid}-${linkTarget.target_cid}`);
+                //   else linkTargets.add(`${linkTarget.lid}-${linkTarget.target_cid}`);
+                // });
+                data?.canvas?.linktargets.forEach(lt => {
+                  if (linkTargets.has(`${lt.lid}-${lt.target_cid}`))
+                    commonLinkTargets.add(`${lt.lid}-${lt.target_cid}`);
+                  else linkTargets.add(`${lt.lid}-${lt.target_cid}`);
+                });
+              }
+            });
+            // console.log(linkTargets, commonLinkTargets, cmapLinkTargets);
+            // console.warn(CDM.conceptMap);
+            // console.log(this.canvas.cy.edges());
+            this.canvas?.cy?.edges('[type="right"]')?.remove();
+            for(const link of commonLinkTargets) {
+              const l = link.split("-");
+              try {
+                this.canvas?.createEdge({
+                  source: l[0],
+                  target: l[1],
+                  type: 'right'
+                });
+              } catch(err) { console.error(err); }
+            }
+
+            let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId, CDM.room);
+            L.canvas(dataMap, App.inst.canvas); 
+            L.compare(dataMap, App.inst.canvas, CDM.conceptMap.canvas);
+            L.log("load-reciprocal-map", CDM.kitId, dataMap);
+            
+          } break;
         }
       } break;
       case 'socket-get-map-state': {
@@ -1534,7 +1651,7 @@ class App {
             App.collab.send("send-map-state", requesterSocketId, mapState);
             let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId, CDM.room);
             L.canvas(dataMap, App.inst.canvas);
-            L.compare(dataMap, App.inst.canvas, CDM.conceptMap.canvas);
+            L.compare(dataMap, App.inst.canvas, CDM.conceptMap?.canvas);
             L.log("send-map-state", {requesterSocketId: requesterSocketId}, dataMap);
           })
       }  break;
@@ -1577,6 +1694,7 @@ class App {
       case 'socket-user-join-room': {
         let user = data.shift();
         let room = data.shift();
+        this.showPeers(room);
         if (user.socketId == App.collab?.socket?.id) {
           Core.instance()?.cookie()?.set('userid', user?.name);
           //.then((e) => console.log(e));
@@ -1584,10 +1702,15 @@ class App {
         }
         // console.log(data, App.collab);
       } break;
+      case 'user-leave-room': {
+        let user = data.shift();
+        let room = data.shift();
+        this.showPeers(room);
+      } break;
       case 'socket-user-leave-room': {
         let user = data.shift();
         let room = data.shift();
-
+        this.showPeers(room);
         let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId, CDM.room);
         L.log("leave-room", {user: user, room: CDM.room}, dataMap);
         
@@ -1687,6 +1810,21 @@ class App {
         L.log(e, {message: mData, room: room, channelId: id}, dataMap);
       } break;
     }
+  }
+
+  showPeers(room) { // console.log(room);
+    if (!room) return;
+    let html = '';
+    for (const user of room?.users) {
+      html += `<li>`;
+      html += `<a href="#" class="dropdown-item item-peer-map" data-userid="${user.name}" 
+                    data-socketid="${user.socketId}">`;
+      html += `<i class="bi bi-diagram-2"></i>`;
+      html += `<small class="text-primary ms-2">${user.name}</small>`;
+      html += `</a>`;
+      html += `</li>`;
+    }
+    $('.peer-maps').html(html);
   }
 
   setKitCDM(kit, conceptMap) {
@@ -2115,3 +2253,65 @@ App.download = (filename, text) => {
 //     tool.enable(enabled);
 //   });
 // };
+
+class AutoFeedback {
+
+  handler;
+  appCanvas;
+  static inst;
+  static delay = 30000;
+
+  constructor(appCanvas) {
+    // console.log(appCanvas);
+    this.appCanvas = appCanvas;
+    this.handler = setInterval(() => {
+      this.compare();
+    }, AutoFeedback.delay);
+  }
+
+  compare() {
+    // console.log(this, CDM.conceptMap);
+    let learnerMapData = KitBuildUI.buildConceptMapData(this.appCanvas);
+    learnerMapData.conceptMap = CDM?.conceptMap?.canvas;
+    // console.log(learnerMapData, this.appCanvas.cy.edges('[type="right"]'));
+    Analyzer.composePropositions(learnerMapData);
+
+    if (!CDM?.conceptMap) {
+      console.warn("Compare:", "Invalid conceptMap."); 
+      return;
+    }
+    if (!CDM?.conceptMap?.map) {
+      console.warn("Compare:", "Invalid conceptMap CDM.");
+      return;
+    }
+
+    let direction = CDM.conceptMap.map.direction;
+    let compare = Analyzer.compare(learnerMapData, direction);
+    console.log(compare);
+    this.appCanvas.cy.edges().removeClass('match');
+    compare?.match.forEach(m => {
+      this.appCanvas.cy.edges(`[source="${m.lid}"][target="${m.tid}"]`).addClass('match');
+    });
+    $('.fb-ma').html(compare.match.length);
+    $('.fb-mi').html(compare.miss.length);
+    $('.fb-ex').html(compare.excess.length);
+    $('.fb-sc').html(parseInt(compare.score * 100) + '%');
+        
+    let dataMap = L.dataMap(CDM.kitId, CDM.conceptMapId, CDM.room);
+    L.canvas(dataMap, this.appCanvas); 
+    L.compare(dataMap, this.appCanvas, CDM.conceptMap.canvas);
+    L.log("auto-feedback", CDM.kitId, dataMap);
+    // console.warn(compare);
+    // dataMap.set('compare', JSON.stringify(compare));
+    // dataMap.set('nmatch', compare.match.length);
+    // dataMap.set('nmiss', compare.miss.length);
+    // dataMap.set('nexcess', compare.excess.length);
+    return compare; 
+  }
+
+  static instance(app) {
+    if (!AutoFeedback.inst) AutoFeedback.inst = new AutoFeedback(app);
+    return AutoFeedback.inst;
+  }
+
+}

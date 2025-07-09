@@ -3,6 +3,16 @@
     <div class="position-absolute top-0 end-0 px-2 py-1 me-2 mt-2 d-flex align-items-center bg-secondary-subtle border border-secondary-subtle rounded">
       <i class="bi bi-clock me-2"></i><span class="timer h5 m-0 text-secondary text-center" style="min-width:4em">00:00:00</span>
     </div>
+    <div class="position-absolute top-0 start-0 px-2 py-1 ms-2 mt-2 d-flex align-items-center bg-secondary-subtle border border-secondary-subtle rounded">
+      <i class="bi bi-check2-circle me-2"></i>
+      <span class="p-2 badge rounded-pill bg-success ms-1"> </span>
+      <small class="fb-ma m-0 text-secondary text-center mx-1 fw-bold">-</small>
+      <span class="p-2 badge rounded-pill bg-primary ms-1"> </span>
+      <small class="fb-ex m-0 text-secondary text-center mx-1 fw-bold">-</small>
+      <span class="p-2 badge rounded-pill bg-danger ms-1"> </span>
+      <small class="fb-mi m-0 text-secondary text-center mx-1 fw-bold">-</small>
+      <small class="fb-sc m-0 text-secondary text-center mx-1 fw-bold">0%</small>
+    </div>
     <div class="flex-fill">&nbsp;</div>
     <button class="bt-open-kit btn btn-sm btn-primary"><i class="bi bi-folder2-open"></i> Open</button>
     <!-- <div class="btn-group btn-group-sm ms-2" id="recompose-readcontent">
@@ -15,6 +25,16 @@
     <div class="dropdown ms-2 dd-saved-maps">
       <button class="bt-load btn btn-sm btn-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-upload"></i> <span class="px-1"><?php echo Lang::l('load'); ?></span></button>
       <ul class="dropdown-menu saved-maps"></ul>
+    </div>
+    <div class="dropdown ms-2 dd-saved-maps">
+      <button class="bt-peer btn btn-sm btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-people-fill"></i> <span class="px-1">Peer</span></button>
+      <div class="dropdown-menu">
+        <ul class="list-group peer-maps"></ul>
+        <hr>
+        <div class="p-2 pt-0">
+          <button class="btn btn-sm btn-primary text-nowrap mx-2 bt-load-reciprocal-map">Load Reciprocal Map</button>
+        </div>
+      </div>
     </div>
     <div class="btn-group btn-group-sm ms-2" id="recompose-reset">
       <button class="bt-reset btn btn-danger"><i class="bi bi-arrow-counterclockwise"></i> <?php echo Lang::l('reset'); ?></button>
@@ -294,6 +314,20 @@
   <div class="card-body d-flex align-items-stretch" style="height: 500px;">
     <div id="viewerContainer" class="overflow-auto position-absolute bg-secondary" style="width: calc(100% - 42px); height: calc(100% - 100px);">
       <div id="viewer" class="pdfViewer"></div>
+    </div>
+    <span class="pdf-info position-absolute pb-1 text-secondary" style="bottom:0; font-size:0.9rem;"><span class="page-info"></span></span>
+    <button class="bt-resize btn btn-sm position-absolute" style="bottom:0; right:0;"><i class="bi bi-arrows-angle-expand"></i></button>
+  </div>
+</div>
+
+<div id="peer-map-dialog" class="card d-none rounded rounded-3 p-1">
+  <div class="bg-secondary-subtle rounded text-center py-2 px-2 d-flex align-items-center">
+    <span class="peer-name flex-fill drag-handle">No name</span>
+    <a class="bt-close bg-dark-subtle rounded text-secondary cursor-pointer px-2 py-1" role="button"><i class="bi bi-x-lg"></i></a>
+  </div>
+  <div class="card-body position-relative p-0">
+    <div class="overflow-auto position-absolute w-100" style="height:calc(100% - 40px);">
+      <img class="peer-image" src="http://localhost/core/files/peermaps/kitgenaipersonal/Q.png" class="position-relative">
     </div>
     <span class="pdf-info position-absolute pb-1 text-secondary" style="bottom:0; font-size:0.9rem;"><span class="page-info"></span></span>
     <button class="bt-resize btn btn-sm position-absolute" style="bottom:0; right:0;"><i class="bi bi-arrows-angle-expand"></i></button>

@@ -44,4 +44,12 @@ class CollabService extends CoreService {
     $result = $db->query($qb->get());
     return $result;
   }
+  function getRoomPairs($room) {
+    $db = self::instance('kb');
+    $qb = QB::instance('pair')
+      ->select('userid')
+      ->where('room', QB::esc($room));
+    $result = $db->query($qb->get());
+    return $result;
+  }
 }

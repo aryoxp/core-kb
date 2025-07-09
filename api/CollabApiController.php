@@ -53,4 +53,14 @@ class CollabApiController extends CoreApi {
       CoreError::instance($ex->getMessage())->show();
     }
   }
+  function getRoomPairs() {
+    try {
+      $room = $this->postv('room');
+      $service = new CollabService();
+      $result = $service->getRoomPairs($room);
+      CoreResult::instance($result)->show();
+    } catch (Exception $ex) {
+      CoreError::instance($ex->getMessage())->show();
+    }
+  }
 }
